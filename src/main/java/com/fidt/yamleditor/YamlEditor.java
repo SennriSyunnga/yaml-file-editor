@@ -11,10 +11,7 @@ import org.yaml.snakeyaml.Yaml;
 
 import java.io.FileWriter;
 import java.io.InputStream;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 
 @Slf4j
@@ -141,30 +138,34 @@ public class YamlEditor {
 
 
     public boolean setValue(Map<String, Object> map, String key, Object value) {
-        //public Map<String, Object> setValue(Map<String, Object> map, String key, Object value) {
         String[] keys = key.split("[.]");
-        //int len = keys.length;
         Map temp = map;
         for (int i = 0; i < keys.length - 1; i++) {
             if (temp.containsKey(keys[i])) {
                 temp = (Map) temp.get(keys[i]);
             } else {
                 return false;
-                //return null;
             }
-//            if (i == len - 2) {
-//                temp.put(keys[i + 1], value);
-//            }
         }
-        temp.put(keys[keys.length - 1], value);
+        temp.put(keys[keys.length - 1], value);//即便没有这个值
         return true; // 设置成功
-        //for (int j = 0; j < len - 1; j++) {
-        //    if (j == len - 1) {
-        //        map.put(keys[j], temp);
-        //    }
-        //}
-        //return map;
     }
+
+    public boolean setValue(Collection map, String key, Object value) {
+        String[] keys = key.split("[.]");
+        Collection temp = map;
+        for (int i = 0; i < keys.length - 1; i++) {
+            if (temp.containsKey(keys[i])) {
+                temp = (Map) temp.get(keys[i]);
+            } else {
+                return false;
+            }
+        }
+        temp.put(keys[keys.length - 1], value);//即便没有这个值
+        return true; // 设置成功
+    }
+
+
 
 
     /**
@@ -182,6 +183,7 @@ public class YamlEditor {
             return false;
         }
 
+        if
         // 如果getValue不返回最高一级，只返回倒数第二级，然后直接对这个Map setValue不好吗？
         Object oldVal = getValue(key, yamlToMap);
 
@@ -190,12 +192,6 @@ public class YamlEditor {
             log.error("{} key is not found", key);
             return false;
         }
-        // TODO: 2020/10/29 如果实际上我想再往下加一级Map呢？ 这个逻辑判断有问题吧。
-        // 不是最小节点值，不修改 :没有必要
-//        if (oldVal instanceof Map) {
-//            log.error("input key is not last node {}", key);
-//            return false;
-//        }
 
         // TODO: 2020/10/29 显然这个判断不了oldVal是对象的情况，只能判断一下非可变类型
         //新旧值一样 不修改
@@ -207,10 +203,7 @@ public class YamlEditor {
         Yaml yaml = new Yaml(dumperOptions);
         String path = this.getClass().getClassLoader().getResource(yamlName).getPath();
         try {
-            //Map<String, Object> resultMap = this.setValue(yamlToMap, key, value);
-             //this.setValue(yamlToMap, key, value);
             if (this.setValue(yamlToMap, key, value)) {
-                //yaml.dump(this.setValue(yamlToMap, key, value), new FileWriter(path));
                 yaml.dump(yamlToMap, new FileWriter(path));
                 return true;
             } else {
