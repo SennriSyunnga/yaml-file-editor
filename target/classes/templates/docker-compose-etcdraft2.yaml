@@ -1,0 +1,40 @@
+# Copyright IBM Corp. All Rights Reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+version: '2'
+
+volumes:
+  orderer0.org1.example.com:
+  orderer1.org1.example.com:
+
+networks:
+  fabric:
+
+services:
+
+  orderer0.org1.example.com:
+    extends:
+      file:   base/docker-compose-base.yaml
+      service: orderer0.org1.example.com
+    container_name: orderer0.${ORDER_DOMAIN}
+    networks:
+      - fabric
+    extra_hosts: &hosts
+      - 'orderer0.${ID1}:${ID1_HOSTS}'
+      - 'orderer1.${ID1}:${ID1_HOSTS}'
+      - 'orderer0.${ID2}:${ID2_HOSTS}'
+      - 'orderer1.${ID2}:${ID2_HOSTS}'
+      - 'orderer0.${ID3}:${ID3_HOSTS}'
+      - 'orderer1.${ID3}:${ID3_HOSTS}'
+
+  orderer1.org1.example.com:
+    extends:
+      file:   base/docker-compose-base.yaml
+      service: orderer1.org1.example.com
+    container_name: orderer1.${ORDER_DOMAIN}
+    networks:
+      - fabric
+    extra_hosts:
+      *hosts
