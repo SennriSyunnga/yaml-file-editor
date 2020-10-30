@@ -101,29 +101,28 @@ public class YamlEditor {
 //    }
 
     /**
+     * @param key
+     * @param target
+     * @return java.lang.Object
      * @Author Sennri
      * @Description 泛型化上面两个函数
      * @Date 2020/10/29 23:05
      * @ParamList:
-     * @param key
-     * @param target
-     * @return java.lang.Object
      */
     public static Object getValue(String key, Object target) throws Exception {
-        if (target instanceof List){
+        if (target instanceof List) {
             if (key.contains(".")) {
                 String[] keys = key.split("[.]");
-                Object object = ((List)target).get(Integer.parseInt(keys[0]));
+                Object object = ((List) target).get(Integer.parseInt(keys[0]));
                 if (object instanceof Map || object instanceof List) { //是Map
                     return getValue(key.substring(key.indexOf(".") + 1), object);
                 } else {
                     return null;
                 }
             } else {
-                return ((List)target).get(Integer.parseInt(key));
+                return ((List) target).get(Integer.parseInt(key));
             }
-        }
-        else if(target instanceof Map){
+        } else if (target instanceof Map) {
             if (key.contains(".")) {
                 String[] keys = key.split("[.]");
                 Object object = ((Map) target).get(keys[0]);
@@ -135,11 +134,10 @@ public class YamlEditor {
             } else {
                 return ((Map) target).get(key);
             }
-        }else{
+        } else {
             throw new Exception("Collection type error");
         }
     }
-
 
 
     // TODO: 2020/10/23 这里应该有问题,并不能解决如果下面是一个数组的情况，但是目前应该还没遇到这种情况
@@ -157,7 +155,7 @@ public class YamlEditor {
         Map<String, Object> result = new LinkedHashMap<>();
         String[] keys = key.split("[.]");
         result.put(keys[keys.length - 1], value);
-        if (keys.length  > 1) {
+        if (keys.length > 1) {
             return generateMap(key.substring(0, key.lastIndexOf(".")), result);
         }
         return result;
@@ -188,18 +186,17 @@ public class YamlEditor {
 //        temp.put(keys[keys.length - 1], value);//即便没有这个值
 //        return true; // 设置成功
 //    }
-    
-    
-    
+
+
     /**
-     * @Author Sennri
-     * @Description 
-     * @Date 2020/10/29 20:40
-     * @ParamList: 
      * @param map
      * @param key
      * @param value
      * @return boolean
+     * @Author Sennri
+     * @Description
+     * @Date 2020/10/29 20:40
+     * @ParamList:
      */
     public boolean setValue(Map<String, Object> map, String key, Object value) {
         String[] keys = key.split("[.]");
@@ -208,11 +205,11 @@ public class YamlEditor {
             return true; // 设置成功
         } else {
             Object object;
-            if ((object = map.get(Integer.parseInt(keys[0]))) != null) {
+            if ((object = map.get(keys[0])) != null) {
                 if (object instanceof Map)
-                    return setValue((Map<String, Object>) object, key, value);
+                    return setValue((Map<String, Object>) object, key.substring(key.indexOf(".") + 1), value);
                 else if (object instanceof List)
-                    return setValue((List<Object>) object, key, value);
+                    return setValue((List<Object>) object, key.substring(key.indexOf(".") + 1), value);
                 else {
                     System.out.println("Input key error");
                     return false;
@@ -225,14 +222,14 @@ public class YamlEditor {
     }
 
     /**
-     * @Author Sennri
-     * @Description 
-     * @Date 2020/10/29 20:40
-     * @ParamList: 
      * @param list
      * @param key
      * @param value
      * @return boolean
+     * @Author Sennri
+     * @Description
+     * @Date 2020/10/29 20:40
+     * @ParamList:
      */
     public boolean setValue(List<Object> list, String key, Object value) {
         String[] keys = key.split("[.]");
@@ -243,9 +240,9 @@ public class YamlEditor {
             Object object;
             if ((object = list.get(Integer.parseInt(keys[0]))) != null) {
                 if (object instanceof Map)
-                    return setValue((Map<String, Object>) object, key, value);
+                    return setValue((Map<String, Object>) object, key.substring(key.indexOf(".") + 1), value);
                 else if (object instanceof List)
-                    return setValue((List<Object>) object, key, value);
+                    return setValue((List<Object>) object, key.substring(key.indexOf(".") + 1), value);
                 else {
                     System.out.println("Input key error");
                     return false;
@@ -256,6 +253,37 @@ public class YamlEditor {
             }
         }
     }
+
+
+
+
+//    public boolean setValue(Object target, String key, Object value) throws Exception {
+//        if (!key.contains(".")) { //说明到达最底的键
+//            if (target instanceof Map){
+//                ((Map)target).put(key, value); //即便没有这个值，也会加上去——有一点风险，感觉不建议这么做。会因为错误操作而改变原有结构。
+//            }else if (target instanceof List){
+//                ((List)target).set(Integer.parseInt(key), value);
+//            }else{
+//                throw new Exception("Error: target must be Map-type or List-type!");
+//            }
+//            return true; // 设置成功
+//        } else {
+//            String[] keys = key.split("[.]");
+//            Object object;
+//            if (target instanceof Map){
+//                object = ((Map)target).get(keys[0]);
+//            }else if (target instanceof List)
+//                object = ((List)target).get(Integer.parseInt(keys[0]));
+//            else{
+//                throw new Exception("Error: target must be Map-type or List-type!");
+//            }
+//            if (object == null){
+//                return false;
+//            }else {
+//                return setValue(object, key.substring(key.indexOf(".") + 1), value);
+//            }
+//        }
+//    }
 
 
     /**
@@ -272,11 +300,10 @@ public class YamlEditor {
         if (null == yamlToMap) {
             return false;
         }
-        
+
         // 只返回倒数第二级
         Object target = getValue(key.substring(0, key.lastIndexOf(".")), yamlToMap); //上一级map
-        Object oldVal = getValue(key.substring(key.lastIndexOf(".")+1) , target); // 对上一级map取key值，得到value
-
+        Object oldVal = getValue(key.substring(key.lastIndexOf(".") + 1), target); // 对上一级map取key值，得到value
 
         // 未找到key 不修改
         if (null == oldVal) {
@@ -284,7 +311,7 @@ public class YamlEditor {
             return false;
         }
 
-        // TODO: 2020/10/29 显然这个判断不了oldVal是对象的情况，只能判断一下非可变类型
+        // TODO: 2020/10/29 显然这个判断不了oldVal是可变对象的情况，例如，一个map，只能判断一下非可变类型，例如，string
         //新旧值一样 不修改
         if (value.equals(oldVal)) {
             log.info("newVal equals oldVal, newVal: {} , oldVal: {}", value, oldVal);
@@ -294,7 +321,7 @@ public class YamlEditor {
         Yaml yaml = new Yaml(dumperOptions);
         String path = this.getClass().getClassLoader().getResource(yamlName).getPath();
         try {
-            //if (this.setValue(target, key, value)) // 这样就不用进去太深了
+            //if (this.setValue(target, key, value)) {// 这样就不用进去太深了
             if (this.setValue(yamlToMap, key, value)) {
                 yaml.dump(yamlToMap, new FileWriter(path));
                 return true;
@@ -302,9 +329,10 @@ public class YamlEditor {
                 return false;
             }
         } catch (Exception e) {
-            log.error("yaml file update failed !");
-            log.error("msg : {} ", e.getMessage());
-            log.error("cause : {} ", e.getCause());
+            e.printStackTrace();
+            //log.error("yaml file update failed !");
+            //log.error("msg : {} ", e.getMessage());
+            //log.error("cause : {} ", e.getCause());
         }
         return false;
     }
@@ -344,14 +372,14 @@ public class YamlEditor {
     }
 
 
-//    public static void main(String[] args) {
-//        YamlEditor configs = new YamlEditor();
-//        Map<String, Object> yamlToMap = configs.getYamlToMap("templates/configtx.yaml");
-//        //System.out.println(yamlToMap);
-//        boolean b = configs.updateYaml("Organizations.0.Name", "OrdererMSP-FIDT", "templates/configtx.yaml");
-//        System.out.println(b);
-//        System.out.println(configs.getYamlToMap("templates/configtx.yaml"));
-//    }
+    public static void main(String[] args) throws Exception {
+        YamlEditor configs = new YamlEditor();
+        Map<String, Object> yamlToMap = configs.getYamlToMap("templates/configtx.yaml");
+        //System.out.println(yamlToMap);
+        boolean b = configs.updateYaml("Organizations.0.Name", "OrdererMSP-FIDT", "templates/configtx.yaml");
+        System.out.println(b);
+        System.out.println(configs.getYamlToMap("templates/configtx.yaml"));
+    }
 }
 
 
