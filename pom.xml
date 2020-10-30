@@ -9,8 +9,8 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
-                    <source>6</source>
-                    <target>6</target>
+                    <source>8</source>
+                    <target>8</target>
                 </configuration>
             </plugin>
         </plugins>
@@ -83,9 +83,12 @@
             <version>4.13</version>
             <scope>test</scope>
         </dependency>
-
+<!--        &lt;!&ndash; https://mvnrepository.com/artifact/ch.qos.logback/logback-core &ndash;&gt;-->
+<!--        <dependency>-->
+<!--            <groupId>ch.qos.logback</groupId>-->
+<!--            <artifactId>logback-core</artifactId>-->
+<!--            <version>1.2.3</version>-->
+<!--        </dependency>-->
     </dependencies>
-
-
 
 </project>

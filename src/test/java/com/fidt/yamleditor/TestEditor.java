@@ -1,16 +1,17 @@
 package com.fidt.yamleditor;
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 
-import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class TestEditor {
+    protected static Log log = LogFactory.getLog(TestEditor.class);
     @Test
     public void testFabCar() throws Exception {
+        log.debug("1234567");
         //EnrollAdmin.main(null);
         //RegisterUser.main(null);
         //YamlEditor.main(null);
