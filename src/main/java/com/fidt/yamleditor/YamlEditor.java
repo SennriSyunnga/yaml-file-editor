@@ -345,33 +345,26 @@ public class YamlEditor {
     }
 
 
-    public boolean insertYaml(String key, Object value, Map<String, Object> yamlToMap, String path) {
+    public boolean insertYaml(String key, Object value, Map<String, Object> yamlToMap, String path) throws Exception {
 
         Yaml yaml = new Yaml(dumperOptions);
         String[] keys = key.split("[.]");
 
         int len = keys.length;
-        Map temp = yamlToMap;
+        Object temp = yamlToMap;
 
         for (int i = 0; i < len; i++) {
-            if (temp.containsKey(keys[i])) {
-                temp = (Map) temp.get(keys[i]);
-            } else {
-                if (i  <= len - 2) {
-                    System.out.println("This map doesn't have the key: " + keys[i]);
-                    try {
-                        Integer integer = new Integer(keys[i]);
-                    }catch (Exception e){
-                        Map<String, Object> newMap = new LinkedHashMap<>();
-                        newMap.put(keys[len - 1], value);
-                    }
+            if ((temp = getValue(keys[i],temp)) != null) {
+                continue;
+            } else if (i <= len-2){
+                try {
+                    Integer integer = new Integer(keys[i+1]);
+                    ArrayList list = new ArrayList();
+                    setValue(String.v ,list);
+                    temp = list;
+                }catch (Exception e){
 
-
-                    temp.put(keys[i], newMap);
-                } else {
-                    temp.put(keys[i], value);
                 }
-                break;
             }
         }
         try (FileWriter fileWriter = new FileWriter(path)){
