@@ -1,14 +1,11 @@
 package com.fidt.yamleditor;
 
-import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.commons.lang.StringUtils;
 
 
 import org.springframework.lang.Nullable;
-import org.springframework.stereotype.Component;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
@@ -35,7 +32,6 @@ public class YamlEditor {
         dumperOptions.setPrettyFlow(false);
     }
 
-
     /**
      * @param fileName 默认是resources目录下的yaml文件, 如果yaml文件在resources子目录下，需要加上子目录 比如：conf/config.yaml
      * @return java.util.Map<java.lang.String, java.lang.Object>
@@ -52,62 +48,13 @@ public class YamlEditor {
         try (InputStream in = YamlEditor.class.getClassLoader().getResourceAsStream(fileName);) {
             yamls = yaml.loadAs(in, LinkedHashMap.class); // 这里应该是有问题的？
         } catch (Exception e) {
-            //log.error("{} load failed !!!", fileName);
+            log.error(fileName +" load failed !!!");
         }
         return yamls;
     }
 
 
-//    /**
-//     * @param key     key格式：aaa.bbb.ccc (如果对于下面是数组的情况呢？
-//     * @param yamlMap
-//     * @return java.lang.Object
-//     * @Param
-//     * @Author Sennri
-//     * @Description 通过properties的方式获取yaml中的属性值
-//     * @Date 2020/10/29 15:06
-//     **/
-//    public static Object getValue(String key, Map<String, Object> yamlMap) {
-//        if (key.contains(".")) {
-//            String[] keys = key.split("[.]");
-//            Object object = yamlMap.get(keys[0]);
-//            if (object instanceof Map) {
-//                return getValue(key.substring(key.indexOf(".") + 1), (Map<String, Object>) object);
-//            } else if (object instanceof List) {
-//                return getValue(key.substring(key.indexOf(".") + 1), (List<Object>) object);
-//            } else {
-//                return null;
-//            }
-//        } else {
-//            return yamlMap.get(key);
-//        }
-//    }
-//
-//    /**
-//     * @param key
-//     * @param yamlList
-//     * @return java.lang.Object
-//     * @Param
-//     * @Author DELL
-//     * @Description 不支持
-//     * @Date 2020/10/29 15:22
-//     **/
-//
-//    public static Object getValue(String key, List<Object> yamlList) {
-//        if (key.contains(".")) {
-//            String[] keys = key.split("[.]");
-//            Object object = yamlList.get(Integer.parseInt(keys[0]));
-//            if (object instanceof Map) { //是Map
-//                return getValue(key.substring(key.indexOf(".") + 1), (Map<String, Object>) object);
-//            } else if (object instanceof List) { //也可能是链表
-//                return getValue(key.substring(key.indexOf(".") + 1), (List<Object>) object);
-//            } else {
-//                return null;
-//            }
-//        } else {
-//            return yamlList.get(Integer.parseInt(key));
-//        }
-//    }
+
 
     /**
      * @param key
@@ -169,6 +116,173 @@ public class YamlEditor {
         }
         return result;
     }
+
+
+    /**
+     * @Param
+     * @param target
+     * @param key
+     * @param value
+     * @return boolean
+     * @Author Sennri
+     * @Description 泛化地对下级进行赋值。
+     * @Date 2020/10/30 17:22
+     **/
+    public boolean setValue(Object target, String key, Object value) throws Exception {
+        if (!key.contains(".")) { //说明到达最底的键
+            if (target instanceof Map) {
+                ((Map) target).put(key, value); //即便没有这个值，也会加上去——有一点风险，感觉不建议这么做。会因为错误操作而改变原有结构。
+            } else if (target instanceof List) {
+                ((List) target).set(Integer.parseInt(key), value);
+            } else {
+                throw new Exception("Error: target must be Map-type or List-type!");
+            }
+            return true; // 设置成功
+        } else {
+            String[] keys = key.split("[.]");
+            Object object;
+            if (target instanceof Map) {
+                object = ((Map) target).get(keys[0]);
+            } else if (target instanceof List)
+                object = ((List) target).get(Integer.parseInt(keys[0]));
+            else {
+                throw new Exception("Error: target must be Map-type or List-type!");
+            }
+            if (object == null) {
+                return false; //并无这个键，修改失败
+            } else {
+                return setValue(object, key.substring(key.indexOf(".") + 1), value);
+            }
+        }
+    }
+
+    /**
+     * 修改yaml中属性的值
+     *
+     * @param key      key是properties的方式： aaa.bbb.ccc (key不存在不修改)
+     * @param value    新的属性值 （新属性值和旧属性值一样，不修改）
+     * @param yamlName
+     * @return true 修改成功，false 修改失败。
+     */
+    public boolean updateYaml(String key, @Nullable Object value, String yamlName) throws Exception {
+        Map<String, Object> yamlToMap = getYamlToMap(yamlName);
+        // getYamlToMap 返回的是Object更合适吧？
+        if (null == yamlToMap) {
+            return false;
+        }
+        // 只返回倒数第二级
+        Object target = getValue(key.substring(0, key.lastIndexOf(".")), yamlToMap); //上一级map
+        Object oldVal = getValue(key.substring(key.lastIndexOf(".") + 1), target); // 对上一级map取key值，得到value
+
+        // 未找到key 不修改
+        if (null == oldVal) {
+            //log.error("{} key is not found", key);
+            return false;
+        }
+
+        // TODO: 2020/10/29 显然这个判断不了oldVal是可变对象的情况，例如，一个map，只能判断一下非可变类型，例如，string
+        //新旧值一样 不修改
+        if (value.equals(oldVal)) {
+            log.debug("New Value equals to old Value, newVal, please checkout the value you want to update.");
+            return false;
+        }
+
+        Yaml yaml = new Yaml(dumperOptions);
+        String path = Objects.requireNonNull(this.getClass().getClassLoader().getResource(yamlName)).getPath();
+        //String path = this.getClass().getClassLoader().getResource(yamlName).getPath();
+        try (FileWriter fileWriter = new FileWriter(path)) {
+            if (this.setValue(target, key.substring(key.lastIndexOf(".") + 1), value)) {// 这样就不用进去太深了
+                //if (this.setValue(yamlToMap, key, value)) {
+                yaml.dump(yamlToMap, fileWriter);
+                return true;
+            } else {
+                return false;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            log.error("yaml file update failed !");
+            //log.error("msg : {} ", e.getMessage());
+            //log.error("cause : {} ", e.getCause());
+        }
+        return false;
+    }
+
+    /**
+     * @Param
+     * @param key
+     * @param value
+     * @param yamlToMap
+     * @param path
+     * @return boolean
+     * @Author
+     * @Description 向下不断使用getValue，得不到时则创建
+     * @Date 2020/10/30 17:25
+     **/
+    public boolean insertYaml(String key, Object value, Map<String, Object> yamlToMap, String path) throws Exception {
+
+        Yaml yaml = new Yaml(dumperOptions);
+        String[] keys = key.split("[.]");
+
+        int len = keys.length;
+        Object temp = yamlToMap;
+
+        for (int i = 0; i < len; i++) { //也许该从1开始
+            if ((getValue(keys[i],temp)) != null) {
+                temp=getValue(keys[i],temp);
+            } else if (i <= len-2){
+                try {
+                    new Integer(keys[i+1]); // 若当前键的下一个键为数字，意味着当前本该得到却没有提取到的temp实际上是一个ArrayList
+                    ArrayList<Object> list = new ArrayList<>();
+                    setValue(temp,keys[i-1] ,list);
+                    temp = list;
+                }catch (Exception e){
+                    Map<String,Object> map = new LinkedHashMap<>();
+                    setValue(temp,keys[i-1] ,map);
+                    temp = map;
+                }
+            }
+        }
+        try (FileWriter fileWriter = new FileWriter(path)){
+            yaml.dump(yamlToMap, fileWriter);
+        } catch (Exception e) {
+            System.out.println("yaml file insert failed !");
+            return false;
+        }
+        return true;
+    }
+
+    public static boolean removeYamlContent(String key, String yamlName) throws Exception {
+        Map<String, Object> yamlToMap = getYamlToMap(yamlName);
+        if (null == yamlToMap) {
+            return false;
+        }
+        // 只返回倒数第二级
+        Object target = getValue(key.substring(0, key.lastIndexOf(".")), yamlToMap); //上一级map
+        if (target == null) {
+            throw new Exception("There is no such a map. Please checkout the key.");
+        } else {
+            if (target instanceof Map)
+                ((Map) target).remove(key.substring(key.lastIndexOf(".") + 1));
+            else if (target instanceof List)
+                ((List) target).remove(Integer.parseInt(key.substring(key.lastIndexOf(".") + 1)));
+            else
+                throw new Exception("Error: target must be Map-type or List-type!");
+            return true;
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        log.debug("12345");
+        YamlEditor configs = new YamlEditor();
+        Map<String, Object> yamlToMap = configs.getYamlToMap("templates/configtx.yaml");
+        //System.out.println(yamlToMap);
+        boolean b = configs.updateYaml("Organizations.0.Name", "OrdererMSP", "templates/configtx.yaml");
+        System.out.println(b);
+        System.out.println(configs.getYamlToMap("templates/configtx.yaml"));
+    }
+}
+
+
 
 //    /**
 //     * @param map
@@ -263,149 +377,53 @@ public class YamlEditor {
 //        }
 //    }
 
-
-
-    public boolean setValue(Object target, String key, Object value) throws Exception {
-        if (!key.contains(".")) { //说明到达最底的键
-            if (target instanceof Map) {
-                ((Map) target).put(key, value); //即便没有这个值，也会加上去——有一点风险，感觉不建议这么做。会因为错误操作而改变原有结构。
-            } else if (target instanceof List) {
-                ((List) target).set(Integer.parseInt(key), value);
-            } else {
-                throw new Exception("Error: target must be Map-type or List-type!");
-            }
-            return true; // 设置成功
-        } else {
-            String[] keys = key.split("[.]");
-            Object object;
-            if (target instanceof Map) {
-                object = ((Map) target).get(keys[0]);
-            } else if (target instanceof List)
-                object = ((List) target).get(Integer.parseInt(keys[0]));
-            else {
-                throw new Exception("Error: target must be Map-type or List-type!");
-            }
-            if (object == null) {
-                return false; //并无这个键，修改失败
-            } else {
-                return setValue(object, key.substring(key.indexOf(".") + 1), value);
-            }
-        }
-    }
-
-    /**
-     * 修改yaml中属性的值
-     *
-     * @param key      key是properties的方式： aaa.bbb.ccc (key不存在不修改)
-     * @param value    新的属性值 （新属性值和旧属性值一样，不修改）
-     * @param yamlName
-     * @return true 修改成功，false 修改失败。
-     */
-    public boolean updateYaml(String key, @Nullable Object value, String yamlName) throws Exception {
-        Map<String, Object> yamlToMap = getYamlToMap(yamlName);
-        // getYamlToMap 返回的是Object更合适吧？
-        if (null == yamlToMap) {
-            return false;
-        }
-        // 只返回倒数第二级
-        Object target = getValue(key.substring(0, key.lastIndexOf(".")), yamlToMap); //上一级map
-        Object oldVal = getValue(key.substring(key.lastIndexOf(".") + 1), target); // 对上一级map取key值，得到value
-
-        // 未找到key 不修改
-        if (null == oldVal) {
-            //log.error("{} key is not found", key);
-            return false;
-        }
-
-        // TODO: 2020/10/29 显然这个判断不了oldVal是可变对象的情况，例如，一个map，只能判断一下非可变类型，例如，string
-        //新旧值一样 不修改
-        if (value.equals(oldVal)) {
-            log.debug("New Value equals to old Value, newVal, please checkout the value you want to update.");
-            return false;
-        }
-
-        Yaml yaml = new Yaml(dumperOptions);
-        String path = Objects.requireNonNull(this.getClass().getClassLoader().getResource(yamlName)).getPath();
-        //String path = this.getClass().getClassLoader().getResource(yamlName).getPath();
-        try (FileWriter fileWriter = new FileWriter(path)) {
-            if (this.setValue(target, key.substring(key.lastIndexOf(".") + 1), value)) {// 这样就不用进去太深了
-                //if (this.setValue(yamlToMap, key, value)) {
-                yaml.dump(yamlToMap, fileWriter);
-                return true;
-            } else {
-                return false;
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            log.error("yaml file update failed !");
-            //log.error("msg : {} ", e.getMessage());
-            //log.error("cause : {} ", e.getCause());
-        }
-        return false;
-    }
-
-
-    public boolean insertYaml(String key, Object value, Map<String, Object> yamlToMap, String path) throws Exception {
-
-        Yaml yaml = new Yaml(dumperOptions);
-        String[] keys = key.split("[.]");
-
-        int len = keys.length;
-        Object temp = yamlToMap;
-
-        for (int i = 0; i < len; i++) {
-            if ((temp = getValue(keys[i],temp)) != null) {
-                continue;
-            } else if (i <= len-2){
-                try {
-                    Integer integer = new Integer(keys[i+1]);
-                    ArrayList list = new ArrayList();
-                    setValue(String.v ,list);
-                    temp = list;
-                }catch (Exception e){
-
-                }
-            }
-        }
-        try (FileWriter fileWriter = new FileWriter(path)){
-            yaml.dump(yamlToMap, fileWriter);
-        } catch (Exception e) {
-            System.out.println("yaml file insert failed !");
-            return false;
-        }
-        return true;
-    }
-
-    public static boolean removeYamlContent(String key, String yamlName) throws Exception {
-        Map<String, Object> yamlToMap = getYamlToMap(yamlName);
-        if (null == yamlToMap) {
-            return false;
-        }
-        // 只返回倒数第二级
-        Object target = getValue(key.substring(0, key.lastIndexOf(".")), yamlToMap); //上一级map
-        if (target == null) {
-            throw new Exception("There is no such a map. Please checkout the key.");
-        } else {
-            if (target instanceof Map)
-                ((Map) target).remove(key.substring(key.lastIndexOf(".") + 1));
-            else if (target instanceof List)
-                ((List) target).remove(Integer.parseInt(key.substring(key.lastIndexOf(".") + 1)));
-            else
-                throw new Exception("Error: target must be Map-type or List-type!");
-            return true;
-        }
-    }
-
-    public static void main(String[] args) throws Exception {
-        log.debug("12345");
-        YamlEditor configs = new YamlEditor();
-        Map<String, Object> yamlToMap = configs.getYamlToMap("templates/configtx.yaml");
-        //System.out.println(yamlToMap);
-        boolean b = configs.updateYaml("Organizations.0.Name", "OrdererMSP", "templates/configtx.yaml");
-        System.out.println(b);
-        System.out.println(configs.getYamlToMap("templates/configtx.yaml"));
-    }
-}
-
-
-
+//    /**
+//     * @param key     key格式：aaa.bbb.ccc (如果对于下面是数组的情况呢？
+//     * @param yamlMap
+//     * @return java.lang.Object
+//     * @Param
+//     * @Author Sennri
+//     * @Description 通过properties的方式获取yaml中的属性值
+//     * @Date 2020/10/29 15:06
+//     **/
+//    public static Object getValue(String key, Map<String, Object> yamlMap) {
+//        if (key.contains(".")) {
+//            String[] keys = key.split("[.]");
+//            Object object = yamlMap.get(keys[0]);
+//            if (object instanceof Map) {
+//                return getValue(key.substring(key.indexOf(".") + 1), (Map<String, Object>) object);
+//            } else if (object instanceof List) {
+//                return getValue(key.substring(key.indexOf(".") + 1), (List<Object>) object);
+//            } else {
+//                return null;
+//            }
+//        } else {
+//            return yamlMap.get(key);
+//        }
+//    }
+//
+//    /**
+//     * @param key
+//     * @param yamlList
+//     * @return java.lang.Object
+//     * @Param
+//     * @Author DELL
+//     * @Description 不支持
+//     * @Date 2020/10/29 15:22
+//     **/
+//
+//    public static Object getValue(String key, List<Object> yamlList) {
+//        if (key.contains(".")) {
+//            String[] keys = key.split("[.]");
+//            Object object = yamlList.get(Integer.parseInt(keys[0]));
+//            if (object instanceof Map) { //是Map
+//                return getValue(key.substring(key.indexOf(".") + 1), (Map<String, Object>) object);
+//            } else if (object instanceof List) { //也可能是链表
+//                return getValue(key.substring(key.indexOf(".") + 1), (List<Object>) object);
+//            } else {
+//                return null;
+//            }
+//        } else {
+//            return yamlList.get(Integer.parseInt(key));
+//        }
+//    }
