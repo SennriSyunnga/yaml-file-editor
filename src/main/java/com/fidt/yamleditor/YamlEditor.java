@@ -1,5 +1,6 @@
 package com.fidt.yamleditor;
 
+import com.sun.xml.internal.ws.policy.privateutil.PolicyUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.commons.lang.StringUtils;
@@ -10,6 +11,7 @@ import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.FileWriter;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
 
@@ -48,13 +50,29 @@ public class YamlEditor {
         try (InputStream in = YamlEditor.class.getClassLoader().getResourceAsStream(fileName);) {
             yamls = yaml.loadAs(in, LinkedHashMap.class); // 这里应该是有问题的？
         } catch (Exception e) {
-            log.error(fileName +" load failed !!!");
+            log.error(fileName + " load failed !!!");
         }
         return yamls;
     }
 
-
-
+    /**
+     * @Author Sennri
+     * @Description 提炼出来的输出到文件的部分
+     * @Date 2020/11/1 12:29
+     * @ParamList:
+     * @param yamls
+     * @param fileName
+     * @return boolean
+     */
+    public static boolean setMapToYaml(Map<String, Object> yamls,String fileName) throws IOException {
+        Yaml yaml = new Yaml(dumperOptions);
+        try (FileWriter fileWriter = new FileWriter(fileName)) {
+            yaml.dump(yamls, fileWriter);
+        } catch (IOException e) {
+            throw new IOException("Cant write content to file!");
+        }
+        return true;
+    }
 
     /**
      * @param key
@@ -118,22 +136,29 @@ public class YamlEditor {
     }
 
 
+
     /**
-     * @Param
+     * @Author Sennri
+     * @Description 向target内寻找键值key，若key为复合形式，则一直向下取键，获得value值，若中途的路径不存在则返回false
+     *              如果只是最下级的键不存在，会put该键。这个函数可以在最底层进行put
+     * @Date 2020/11/1 12:30
+     * @ParamList:
      * @param target
      * @param key
      * @param value
      * @return boolean
-     * @Author Sennri
-     * @Description 泛化地对下级进行赋值。
-     * @Date 2020/10/30 17:22
-     **/
+     */
     public boolean setValue(Object target, String key, Object value) throws Exception {
+        // TODO: 2020/11/1 这里没有在底层数组里插入一个新值的逻辑 
         if (!key.contains(".")) { //说明到达最底的键
             if (target instanceof Map) {
                 ((Map) target).put(key, value); //即便没有这个值，也会加上去——有一点风险，感觉不建议这么做。会因为错误操作而改变原有结构。
             } else if (target instanceof List) {
-                ((List) target).set(Integer.parseInt(key), value);
+                if (Integer.parseInt(key) < ((List) target).size()-1){
+                    ((List) target).set(Integer.parseInt(key), value);
+                }else{ //新增
+                    ((List) target).add(value);
+                }
             } else {
                 throw new Exception("Error: target must be Map-type or List-type!");
             }
@@ -156,14 +181,18 @@ public class YamlEditor {
         }
     }
 
+
     /**
-     * 修改yaml中属性的值
-     *
-     * @param key      key是properties的方式： aaa.bbb.ccc (key不存在不修改)
-     * @param value    新的属性值 （新属性值和旧属性值一样，不修改）
-     * @param yamlName
-     * @return true 修改成功，false 修改失败。
+     * @Author Sennri
+     * @Description 更新yaml文件中的特定键，如果键不存在则不修改（不赋值），如果存在则更换为新值。
+     * @Date 2020/10/31 20:19
+     * @ParamList:
+     * @param key key是properties的方式： aaa.bbb.ccc (key不存在不修改)
+     * @param value 新的属性值 （新属性值和旧属性值一样，不修改）
+     * @param yamlName yaml文件的名字
+     * @return boolean true 修改成功，false 修改失败。
      */
+
     public boolean updateYaml(String key, @Nullable Object value, String yamlName) throws Exception {
         Map<String, Object> yamlToMap = getYamlToMap(yamlName);
         // getYamlToMap 返回的是Object更合适吧？
@@ -172,85 +201,134 @@ public class YamlEditor {
         }
         // 只返回倒数第二级
         Object target = getValue(key.substring(0, key.lastIndexOf(".")), yamlToMap); //上一级map
-        Object oldVal = getValue(key.substring(key.lastIndexOf(".") + 1), target); // 对上一级map取key值，得到value
+        Object oldValue = getValue(key.substring(key.lastIndexOf(".") + 1), target); // 对上一级map取key值，得到value
 
-        // 未找到key 不修改
-        if (null == oldVal) {
-            //log.error("{} key is not found", key);
+        // 未找到key 返回false
+        if (null == oldValue) {
+            log.error("Key " + key + " is not found.");
             return false;
         }
 
         // TODO: 2020/10/29 显然这个判断不了oldVal是可变对象的情况，例如，一个map，只能判断一下非可变类型，例如，string
         //新旧值一样 不修改
-        if (value.equals(oldVal)) {
-            log.debug("New Value equals to old Value, newVal, please checkout the value you want to update.");
+        if (value.equals(oldValue)) {
+            log.debug("New Value equals to old Value "+oldValue+" please checkout the value you want to update.");
             return false;
         }
 
-        Yaml yaml = new Yaml(dumperOptions);
-        String path = Objects.requireNonNull(this.getClass().getClassLoader().getResource(yamlName)).getPath();
-        //String path = this.getClass().getClassLoader().getResource(yamlName).getPath();
-        try (FileWriter fileWriter = new FileWriter(path)) {
-            if (this.setValue(target, key.substring(key.lastIndexOf(".") + 1), value)) {// 这样就不用进去太深了
-                //if (this.setValue(yamlToMap, key, value)) {
-                yaml.dump(yamlToMap, fileWriter);
-                return true;
-            } else {
+        String path = Objects.requireNonNull(this.getClass().getClassLoader().getResource(yamlName)).getPath();//String path = this.getClass().getClassLoader().getResource(yamlName).getPath();
+        if (setValue(target, key.substring(key.lastIndexOf(".") + 1), value)){
+            try{
+                return setMapToYaml(yamlToMap,path);
+            }catch (IOException e){
+                e.printStackTrace();
+                log.error("yaml file update failed !");
+                log.error("msg : "+e.getMessage());
+                log.error("cause : "+ e.getCause());
                 return false;
             }
-        } catch (Exception e) {
-            e.printStackTrace();
-            log.error("yaml file update failed !");
-            //log.error("msg : {} ", e.getMessage());
-            //log.error("cause : {} ", e.getCause());
-        }
-        return false;
+        }else return false;
+//        try (FileWriter fileWriter = new FileWriter(path)) {
+//            if (setValue(target, key.substring(key.lastIndexOf(".") + 1), value)) {// 这样就不用进去太深了 //if (this.setValue(yamlToMap, key, value)) {
+//                Yaml yaml = new Yaml(dumperOptions);
+//                yaml.dump(yamlToMap, fileWriter);
+//                return true;
+//            } else {
+//                return false;
+//            }
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//            log.error("yaml file update failed !");
+
+//        }
+//        return false;
     }
 
     /**
-     * @Param
-     * @param key
-     * @param value
-     * @param yamlToMap
-     * @param path
+     * @param key        完整的文件位置（可以省略路径）
+     * @param value      打算设置的值
+     * @param yamlToMap  转换成LinkedHashMap的yaml文件
+     * @param outputPath 文件输出路径（如果有的话）
      * @return boolean
-     * @Author
-     * @Description 向下不断使用getValue，得不到时则创建
+     * @Param
+     * @Author Sennri
+     * @Description 向下不断使用getValue，得不到时则判断下一个键是否位数字，若为数字创建ArrayList，若为字段创建LinkedHashMap
      * @Date 2020/10/30 17:25
      **/
-    public boolean insertYaml(String key, Object value, Map<String, Object> yamlToMap, String path) throws Exception {
-
-        Yaml yaml = new Yaml(dumperOptions);
+    public boolean insertYaml(String key, Object value, Map<String, Object> yamlToMap, String outputPath) throws Exception {
         String[] keys = key.split("[.]");
-
         int len = keys.length;
         Object temp = yamlToMap;
 
         for (int i = 0; i < len; i++) { //也许该从1开始
-            if ((getValue(keys[i],temp)) != null) {
-                temp=getValue(keys[i],temp);
-            } else if (i <= len-2){
+            if ((getValue(keys[i], temp)) != null) {
+                temp = getValue(keys[i], temp);
+            } else if (i <= len - 2) {
                 try {
-                    new Integer(keys[i+1]); // 若当前键的下一个键为数字，意味着当前本该得到却没有提取到的temp实际上是一个ArrayList
+                    new Integer(keys[i + 1]); // 若当前键的下一个键为数字，意味着当前本该得到却没有提取到的temp实际上是一个ArrayList
                     ArrayList<Object> list = new ArrayList<>();
-                    setValue(temp,keys[i-1] ,list);
+                    setValue(temp, keys[i], list);
                     temp = list;
-                }catch (Exception e){
-                    Map<String,Object> map = new LinkedHashMap<>();
-                    setValue(temp,keys[i-1] ,map);
+                } catch (Exception e) {
+                    Map<String, Object> map = new LinkedHashMap<>();
+                    setValue(temp, keys[i], map);
                     temp = map;
                 }
             }
         }
-        try (FileWriter fileWriter = new FileWriter(path)){
-            yaml.dump(yamlToMap, fileWriter);
-        } catch (Exception e) {
-            System.out.println("yaml file insert failed !");
+        setValue(temp, keys[keys.length - 1], value); //写入键值,这个真的会报失败吗？
+        
+        try {
+            return setMapToYaml(yamlToMap,outputPath); //这个真的会报失败吗？
+        }catch (IOException e){
+            e.printStackTrace();
+            log.error("Yaml file insert failed!");
             return false;
         }
-        return true;
     }
 
+
+    /**
+     * @Author Sennri
+     * @Description
+     * @Date 2020/10/31 20:47
+     * @ParamList:
+     * @param key
+     * @param value
+     * @param inputPath
+     * @param outputPath
+     * @return boolean
+     */
+    public boolean insertYaml(String key, Object value, String inputPath, String outputPath) throws Exception {
+        Map<String, Object> yamlToMap = getYamlToMap(inputPath);
+        return insertYaml(key, value, yamlToMap, outputPath);
+    }
+
+    /**
+     * @Author Sennri
+     * @Description
+     * @Date 2020/10/31 20:47
+     * @ParamList:
+     * @param key
+     * @param value
+     * @param inputPath
+     * @return boolean
+     */
+    public boolean insertYaml(String key, Object value, String inputPath) throws Exception {
+        Map<String, Object> yamlToMap = getYamlToMap(inputPath);
+        return insertYaml(key, value, yamlToMap, inputPath);
+    }
+
+
+    /**
+     * @Author Sennri
+     * @Description
+     * @Date 2020/11/1 12:06
+     * @ParamList:
+     * @param key
+     * @param yamlName 待去除内容的文件
+     * @return boolean
+     */
     public static boolean removeYamlContent(String key, String yamlName) throws Exception {
         Map<String, Object> yamlToMap = getYamlToMap(yamlName);
         if (null == yamlToMap) {
@@ -267,7 +345,13 @@ public class YamlEditor {
                 ((List) target).remove(Integer.parseInt(key.substring(key.lastIndexOf(".") + 1)));
             else
                 throw new Exception("Error: target must be Map-type or List-type!");
-            return true;
+        }
+        try{
+            return setMapToYaml(yamlToMap,yamlName);
+        }catch (IOException e){
+            e.printStackTrace();
+            log.error("Failed to output the content to file!");
+            return false;
         }
     }
 
@@ -283,6 +367,7 @@ public class YamlEditor {
 }
 
 
+//  弃用的代码：Deprecated
 
 //    /**
 //     * @param map
