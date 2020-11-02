@@ -10,7 +10,6 @@ import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.BufferedWriter;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -43,8 +42,8 @@ public class YamlEditor {
      * @Date 2020/11/1 22:48
      * @ParamList:
      */
-
-    public static Map<String, Object> getYamlToMap(String fileName) {
+    // 目前限定是从resource文件夹下取文件
+    public static Map<String, Object> getMapFromYaml(String fileName) {
         LinkedHashMap<String, Object> yamls = new LinkedHashMap<>();
         // Yaml yaml = new Yaml();
         // @Cleanup InputStream in = YamlEditor.class.getClassLoader().getResourceAsStream(fileName); // 这里舍弃了@写法
@@ -52,6 +51,24 @@ public class YamlEditor {
             yamls = new Yaml().loadAs(in, LinkedHashMap.class); // 这里应该是有问题的？
         } catch (Exception e) {
             log.error(fileName + " load failed !!!");
+        }
+        return yamls;
+    }
+
+    /**
+     * @Author Sennri
+     * @Description 
+     * @Date 2020/11/2 23:01
+     * @ParamList: 
+     * @param path
+     * @return java.util.Map<java.lang.String,java.lang.Object>
+     */
+    public static Map<String, Object> getMapFromYaml(Path path) {
+        LinkedHashMap<String, Object> yamls = new LinkedHashMap<>();
+        try (InputStream in = Files.newInputStream(path)) {
+            yamls = new Yaml().loadAs(in, LinkedHashMap.class); // 这里应该是有问题的？
+        } catch (Exception e) {
+            log.error(path + " load failed !!!");
         }
         return yamls;
     }
@@ -69,6 +86,21 @@ public class YamlEditor {
         //Yaml yaml = new Yaml(dumperOptions);
         // 若不存在改文件，则创造文件。该逻辑不会创建不存在的文件夹。
         Path path = Paths.get(fileName);
+        return dumpMapToYaml(yamls,path);
+//        if (!Files.exists(path)) {
+//            Files.createFile(path);
+//        }
+//        try (BufferedWriter bufferedWriter = Files.newBufferedWriter(path)) {//try (FileWriter fileWriter = new FileWriter(fileName)) {
+//            new Yaml(dumperOptions).dump(yamls, bufferedWriter);
+//            return true;
+//        } catch (IOException e) {
+//            throw new IOException("Cant write content to file!");
+//        }
+    }
+
+    public static boolean dumpMapToYaml(Map<String, Object> yamls, Path path) throws IOException {
+        //Yaml yaml = new Yaml(dumperOptions);
+        // 若不存在该文件，则创造文件。该逻辑不会创建不存在的文件夹。
         if (!Files.exists(path)) {
             Files.createFile(path);
         }
@@ -203,9 +235,9 @@ public class YamlEditor {
      * @Date 2020/11/1 22:53
      * @ParamList:
      */
-    public boolean updateYaml(String key, @Nullable Object value, String yamlName) throws Exception {
+    public static boolean updateYaml(String key, @Nullable Object value, String yamlName) throws Exception {
         // getYamlToMap 返回的是Object更合适吧？
-        Map<String, Object> yamlToMap = getYamlToMap(yamlName);
+        Map<String, Object> yamlToMap = getMapFromYaml(yamlName);
         // if the yaml file is empty, then return false.
         if (null == yamlToMap) {
             return false;
@@ -230,7 +262,8 @@ public class YamlEditor {
             return false;
         }
 
-        String path = Objects.requireNonNull(this.getClass().getClassLoader().getResource(yamlName)).getPath();//String path = this.getClass().getClassLoader().getResource(yamlName).getPath();
+        // 这里限定了从classes文件夹下读取文件,substring(1)是为了删除开头getpath得到的多余的"\",这个格式getPath方法是不支持的
+        String path = Objects.requireNonNull(YamlEditor.class.getClassLoader().getResource(yamlName)).getPath().substring(1);//String path = this.getClass().getClassLoader().getResource(yamlName).getPath();
         if (setValue(key.substring(key.lastIndexOf(".") + 1), value, target)) {
             try {
                 return dumpMapToYaml(yamlToMap, path);
@@ -244,20 +277,6 @@ public class YamlEditor {
         } else return false;
     }
 
-//        try (FileWriter fileWriter = new FileWriter(path)) {
-//            if (setValue(target, key.substring(key.lastIndexOf(".") + 1), value)) {// 这样就不用进去太深了 //if (this.setValue(yamlToMap, key, value)) {
-//                Yaml yaml = new Yaml(dumperOptions);
-//                yaml.dump(yamlToMap, fileWriter);
-//                return true;
-//            } else {
-//                return false;
-//            }
-//        } catch (Exception e) {
-//            e.printStackTrace();
-//            log.error("yaml file update failed !");
-
-//        }
-//        return false;
 
     /**
      * @param key       键
@@ -321,7 +340,6 @@ public class YamlEditor {
         }
     }
 
-
     /**
      * @param key
      * @param value
@@ -334,7 +352,7 @@ public class YamlEditor {
      * @ParamList:
      */
     public static boolean insertYaml(String key, Object value, String inputPath, String outputPath) throws Exception {
-        Map<String, Object> yamlToMap = getYamlToMap(inputPath);
+        Map<String, Object> yamlToMap = getMapFromYaml(inputPath);
         return insertYaml(key, value, yamlToMap, outputPath);
     }
 
@@ -349,7 +367,7 @@ public class YamlEditor {
      * @ParamList:
      */
     public static boolean insertYaml(String key, Object value, String inputPath) throws Exception {
-        Map<String, Object> yamlToMap = getYamlToMap(inputPath);
+        Map<String, Object> yamlToMap = getMapFromYaml(inputPath);
         return insertYaml(key, value, yamlToMap, inputPath);
     }
 
@@ -384,7 +402,7 @@ public class YamlEditor {
      * @ParamList:
      */
     public static boolean removeYamlContent(String key, String inputYamlName, String outputYamlName) throws Exception {
-        Map<String, Object> yamlToMap = getYamlToMap(inputYamlName);
+        Map<String, Object> yamlToMap = getMapFromYaml(inputYamlName);
         if (yamlToMap == null) {
             return false;
         }
@@ -404,17 +422,28 @@ public class YamlEditor {
         return removeYamlContent(key, yamlName, yamlName);
     }
 
-    /*
-    public static void main(String[] args) throws Exception {
-        log.debug("12345");
-        YamlEditor configs = new YamlEditor();
-        Map<String, Object> yamlToMap = configs.getYamlToMap("templates/configtx.yaml");
-        //System.out.println(yamlToMap);
-        boolean b = configs.updateYaml("Organizations.0.Name", "OrdererMSP", "templates/configtx.yaml");
-        System.out.println(b);
-        System.out.println(configs.getYamlToMap("templates/configtx.yaml"));
-    }
-     */
+
+//    public static void main(String[] args) throws Exception {
+//        LinkedHashMap map = new LinkedHashMap();
+//        Object object=YamlEditor.getValue("s",map);//取空值测试
+//        YamlEditor.insertValueToObject("Organizations.0.Name","org1",map); //创建新路径测试
+//        log.info(map);
+//        YamlEditor.insertValueToObject("Organizations.1.Name","org2",map);
+//        log.info(map);
+//        YamlEditor.insertValueToObject("Organizations.3.Name","org3",map); //index out of range时会自动加在最末尾
+//        log.info(map);
+//        YamlEditor.insertValueToObject("Organizations.0.ports.0","172.21.18.41",map);
+//        log.info(map);
+//        YamlEditor.setValue("Organizations.0.Name","FIDT",map); //改值测试
+//        YamlEditor.setValue("Organizations.0.ports.1","172.21.18.42",map); //setValue添加key value对测试
+//        log.info(YamlEditor.getValue("Organizations.0.ports.1",map));
+//        YamlEditor.removeListOrMapContent("Organizations.1",map);
+//        log.info(map);
+//        log.info(YamlEditor.dumpMapToYaml(map,"test.yaml"));
+//        Map temp = YamlEditor.getMapFromYaml("templates/test.yaml");
+//        log.info(temp);
+//        return;
+//    }
 }
 
 

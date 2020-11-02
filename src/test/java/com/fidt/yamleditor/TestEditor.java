@@ -3,10 +3,14 @@ import org.junit.Test;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+
+import static com.fidt.yamleditor.YamlEditor.getMapFromYaml;
 
 public class TestEditor {
     protected static Log log = LogFactory.getLog(TestEditor.class);
@@ -28,21 +32,22 @@ public class TestEditor {
         log.info(YamlEditor.getValue("Organizations.0.ports.1",map));
         YamlEditor.removeListOrMapContent("Organizations.1",map);
         log.info(map);
-        YamlEditor.dumpMapToYaml(map,"test.yaml");
-        Map temp = YamlEditor.getYamlToMap("test.yaml");
+        String path = (YamlEditor.class.getClassLoader().getResource("templates").getPath()+"/configtx.yaml").substring(1);
+        String path2 = YamlEditor.class.getClassLoader().getResource("templates/configtx.yaml").getPath();
+        log.info(YamlEditor.dumpMapToYaml(map, path));
+        Map temp = getMapFromYaml(path);
         log.info(temp);
         return;
     }
 
     @Test
     public void testUpdateYaml() throws Exception {
-        YamlEditor configs = new YamlEditor();
-        Map<String, Object> yamlToMap = configs.getYamlToMap("templates/configtx.yaml");
+        Map<String, Object> yamlToMap = getMapFromYaml("templates/configtx.yaml");
         System.out.println(yamlToMap);
-        boolean b = configs.updateYaml("Organizations.0.Name", "Orderer", "templates/configtx.yaml");
+        boolean b = new YamlEditor().updateYaml("Organizations.0.Name", "Orderer", "templates/configtx.yaml");
         System.out.println(b);
         System.out.println(yamlToMap);
-        System.out.println(configs.getYamlToMap("templates/configtx.yaml"));
+        System.out.println(getMapFromYaml("templates/configtx.yaml"));
     }
 
     @Test
