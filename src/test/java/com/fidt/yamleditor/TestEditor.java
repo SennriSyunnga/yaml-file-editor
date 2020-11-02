@@ -5,35 +5,69 @@ import org.apache.commons.logging.LogFactory;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 public class TestEditor {
     protected static Log log = LogFactory.getLog(TestEditor.class);
+
     @Test
-    public void testFabCar() throws Exception {
-        log.debug("1234567");
-        //EnrollAdmin.main(null);
-        //RegisterUser.main(null);
-        //YamlEditor.main(null);
+    public void test() throws Exception {
+        LinkedHashMap map = new LinkedHashMap();
+        Object object=YamlEditor.getValue("s",map);
+        YamlEditor.insertValueToObject("Organizations.0.Name","org1",map);
+        YamlEditor.insertValueToObject("Organizations.1.Name","org2",map);
+        YamlEditor.insertValueToObject("Organizations.3.Name","org3",map);
+        YamlEditor.insertValueToObject("Organizations.0.ports.0","172.21.18.41",map);
+        YamlEditor.setValue("Organizations.0.Name","FIDT",map);
+        YamlEditor.setValue("Organizations.0.ports.1","172.21.18.42",map);
+        log.info(YamlEditor.getValue("Organizations.0.ports.1",map));
+        return;
+    }
+
+
+    @Test
+    public void testUpdateYaml() throws Exception {
         YamlEditor configs = new YamlEditor();
         Map<String, Object> yamlToMap = configs.getYamlToMap("templates/configtx.yaml");
-        //System.out.println(yamlToMap);
-        boolean b = configs.updateYaml("Organizations.0.Name", "OrdererMSP-FIDT", "templates/configtx.yaml");
+        System.out.println(yamlToMap);
+        boolean b = configs.updateYaml("Organizations.0.Name", "Orderer", "templates/configtx.yaml");
         System.out.println(b);
+        System.out.println(yamlToMap);
         System.out.println(configs.getYamlToMap("templates/configtx.yaml"));
     }
+
+    @Test
+    public void testInsertYaml() throws Exception {
+        LinkedHashMap map = new LinkedHashMap();
+        YamlEditor.insertValueToObject("Organizations.0.Name","org1",map);
+        YamlEditor.insertValueToObject("Organizations.1.Name","org2",map);
+        YamlEditor.insertValueToObject("Organizations.3.Name","org3",map);
+        YamlEditor.insertValueToObject("Organizations.0.ports.0","172.21.18.41",map);
+    }
+
+    @Test
+    public void testYamlSetValue() throws Exception {
+        LinkedHashMap map = new LinkedHashMap();
+        YamlEditor.insertValueToObject("Organizations.0.Name","org1",map);
+        YamlEditor.insertValueToObject("Organizations.1.Name","org2",map);
+        YamlEditor.insertValueToObject("Organizations.3.Name","org3",map);
+        YamlEditor.insertValueToObject("Organizations.0.ports.0","172.21.18.41",map);
+        YamlEditor.setValue("Organizations.0.Name","FIDT",map);
+        YamlEditor.setValue("Organizations.0.ports.1","172.21.18.42",map);
+    }
+
+
     @Test
     public void testYamlGetValue() throws Exception {
-        LinkedHashMap<String,Object> map = new LinkedHashMap();
-        map.put("1",1);
-        map.put("2",2);
-        LinkedHashMap<String,Object> map2 = new LinkedHashMap();
-        map.put("3",map2);
-        if (YamlEditor.getValue("3",map) instanceof Map){
-            Map map3 = (Map) YamlEditor.getValue("3",map);
-            map3.put("9",1);
-        }
-        return;
+        LinkedHashMap map = new LinkedHashMap();
+        YamlEditor.insertValueToObject("Organizations.0.Name","org1",map);
+        YamlEditor.insertValueToObject("Organizations.1.Name","org2",map);
+        YamlEditor.insertValueToObject("Organizations.3.Name","org3",map);
+        YamlEditor.insertValueToObject("Organizations.0.ports.0","172.21.18.41",map);
+        YamlEditor.setValue("Organizations.0.Name","FIDT",map);
+        YamlEditor.setValue("Organizations.0.ports.1","172.21.18.42",map);
+        log.info(YamlEditor.getValue("Organizations.0.ports.1",map));
     }
     @Test
     public void testYamlGetValue2() throws Exception {
