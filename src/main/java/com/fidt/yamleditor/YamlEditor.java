@@ -9,9 +9,13 @@ import org.springframework.lang.Nullable;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
+import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 
 
@@ -32,20 +36,20 @@ public class YamlEditor {
     }
 
     /**
+     * @param fileName 默认是resources目录下的yaml文件, 如果yaml文件在resources子目录下，需要加上子目录 比如：conf/config.yaml
+     * @return java.util.Map<java.lang.String, java.lang.Object>
      * @Author Sennri
      * @Description 将yaml配置文件转化成map
      * @Date 2020/11/1 22:48
      * @ParamList:
-     * @param fileName 默认是resources目录下的yaml文件, 如果yaml文件在resources子目录下，需要加上子目录 比如：conf/config.yaml
-     * @return java.util.Map<java.lang.String,java.lang.Object>
      */
 
     public static Map<String, Object> getYamlToMap(String fileName) {
         LinkedHashMap<String, Object> yamls = new LinkedHashMap<>();
-        Yaml yaml = new Yaml();
+        // Yaml yaml = new Yaml();
         // @Cleanup InputStream in = YamlEditor.class.getClassLoader().getResourceAsStream(fileName); // 这里舍弃了@写法
         try (InputStream in = YamlEditor.class.getClassLoader().getResourceAsStream(fileName)) {
-            yamls = yaml.loadAs(in, LinkedHashMap.class); // 这里应该是有问题的？
+            yamls = new Yaml().loadAs(in, LinkedHashMap.class); // 这里应该是有问题的？
         } catch (Exception e) {
             log.error(fileName + " load failed !!!");
         }
@@ -53,34 +57,38 @@ public class YamlEditor {
     }
 
     /**
+     * @param yamls    map or list, commonly LinkedHashMap
+     * @param fileName
+     * @return boolean
      * @Author Sennri
      * @Description 通用部分：将map存入fileName当中
      * @Date 2020/11/1 22:49
      * @ParamList:
-     * @param yamls map or list, commonly LinkedHashMap
-     * @param fileName
-     * @return boolean
      */
-    public static boolean setMapToYaml(Map<String, Object> yamls, String fileName) throws IOException {
-        Yaml yaml = new Yaml(dumperOptions);
-        // 这里是不是应该存在一个如果没有该文件则创建该文件、实现另存为的逻辑？
-        try (FileWriter fileWriter = new FileWriter(fileName)) {
-            yaml.dump(yamls, fileWriter);
+    public static boolean dumpMapToYaml(Map<String, Object> yamls, String fileName) throws IOException {
+        //Yaml yaml = new Yaml(dumperOptions);
+        // 若不存在改文件，则创造文件。该逻辑不会创建不存在的文件夹。
+        Path path = Paths.get(fileName);
+        if (!Files.exists(path)) {
+            Files.createFile(path);
+        }
+        try (BufferedWriter bufferedWriter = Files.newBufferedWriter(path)) {//try (FileWriter fileWriter = new FileWriter(fileName)) {
+            new Yaml(dumperOptions).dump(yamls, bufferedWriter);
+            return true;
         } catch (IOException e) {
             throw new IOException("Cant write content to file!");
         }
-        return true;
     }
 
 
     /**
-     * @Author Sennri
-     * @Description 泛型化的取value函数，也可以提取出map，不一定要取key。
-     * @Date 2020/11/1 22:50
-     * @ParamList:
      * @param key
      * @param target
      * @return java.lang.Object
+     * @Author Sennri
+     * @Description 泛型化的取value函数，也可以提取出map，不一定要取key。应该不能再进一步泛型化了吧？
+     * @Date 2020/11/1 22:50
+     * @ParamList:
      */
     public static Object getValue(String key, Object target) throws Exception {
         if (target instanceof List) {
@@ -93,9 +101,9 @@ public class YamlEditor {
                     return null;
                 }
             } else {
-                try{
+                try {
                     return ((List) target).get(Integer.parseInt(key));
-                }catch (IndexOutOfBoundsException e){ // 若超出index，也返回null
+                } catch (IndexOutOfBoundsException e) { // 若超出index，也返回null，这逻辑和Map保持一致
                     return null;
                 }
             }
@@ -117,16 +125,16 @@ public class YamlEditor {
         }
     }
 
-
     // TODO: 2020/10/23 这里应该有问题,并不能解决如果下面是一个数组的情况，但是目前应该还没遇到这种情况
+
     /**
+     * @param key
+     * @param value
+     * @return java.util.Map<java.lang.String, java.lang.Object>
      * @Author Sennri
      * @Description 使用递归的方式设置map中的值，仅适合单一属性 key的格式: "server.port"
      * @Date 2020/10/29 15:42
      * @ParamList:
-     * @param key
-     * @param value
-     * @return java.util.Map<java.lang.String, java.lang.Object>
      **/
     @Deprecated
     public Map<String, Object> generateMap(String key, Object value) {
@@ -141,15 +149,15 @@ public class YamlEditor {
 
 
     /**
-     * @Author Sennri
-     * @Description 向target内寻找键值key，若key为复合形式，则一直向下取键，获得value值，若中途的路径不存在则返回false
-     *              如果只是最下级的键不存在，会put该键。这个函数可以在最底层进行put
-     * @Date 2020/11/1 22:45
-     * @ParamList:
      * @param target 需要进行键值修改的对象
      * @param key    目标键
      * @param value  目标值
      * @return boolean
+     * @Author Sennri
+     * @Description 向target内寻找键值key，若key为复合形式，则一直向下取键，获得value值，若中途的路径不存在则返回false
+     * 如果只是最下级的键不存在，会put该键。这个函数可以在最底层进行put
+     * @Date 2020/11/1 22:45
+     * @ParamList:
      */
     public static boolean setValue(String key, Object value, Object target) throws Exception {
         if (key.isEmpty()) //为了复用
@@ -186,14 +194,14 @@ public class YamlEditor {
     }
 
     /**
+     * @param key      key是properties的方式： aaa.bbb.ccc (key不存在不修改)
+     * @param value    新的属性值 （新属性值和旧属性值一样，不修改）
+     * @param yamlName yaml文件的名字
+     * @return boolean
      * @Author Sennri
      * @Description 更新yaml文件中的特定键，如果键不存在则不修改（不赋值），如果存在则更换为新值。
      * @Date 2020/11/1 22:53
      * @ParamList:
-     * @param key       key是properties的方式： aaa.bbb.ccc (key不存在不修改)
-     * @param value     新的属性值 （新属性值和旧属性值一样，不修改）
-     * @param yamlName  yaml文件的名字
-     * @return boolean
      */
     public boolean updateYaml(String key, @Nullable Object value, String yamlName) throws Exception {
         // getYamlToMap 返回的是Object更合适吧？
@@ -210,7 +218,7 @@ public class YamlEditor {
 
         // 未找到key 返回false
         // key not found, return false.
-        if (null == oldValue) {
+        if (oldValue == null) {
             log.error("Key " + key + " is not found.");
             return false;
         }
@@ -225,7 +233,7 @@ public class YamlEditor {
         String path = Objects.requireNonNull(this.getClass().getClassLoader().getResource(yamlName)).getPath();//String path = this.getClass().getClassLoader().getResource(yamlName).getPath();
         if (setValue(key.substring(key.lastIndexOf(".") + 1), value, target)) {
             try {
-                return setMapToYaml(yamlToMap, path);
+                return dumpMapToYaml(yamlToMap, path);
             } catch (IOException e) {
                 e.printStackTrace();
                 log.error("yaml file update failed !");
@@ -252,14 +260,14 @@ public class YamlEditor {
 //        return false;
 
     /**
+     * @param key       键
+     * @param value     值
+     * @param listOrMap 可能是List也可能是Map的对象
+     * @return boolean
      * @Author Sennri
-     * @Description 采用递归方法向下赋值,遇到不存在的Key路径将强制存在生成路径对应的对象
+     * @Description 采用递归方法向下赋值, 遇到不存在的Key路径将强制存在生成路径对应的对象
      * @Date 2020/11/2 10:59
      * @ParamList:
-     * @param key
-     * @param value
-     * @param listOrMap
-     * @return boolean
      */
     public static boolean insertValueToObject(String key, Object value, Object listOrMap) throws Exception {
         if (key.isEmpty()) //因为这个函数会复用，所以空判断在这里进行即可
@@ -289,41 +297,41 @@ public class YamlEditor {
 
 
     /**
+     * @param key        完整的文件位置（可以省略路径）
+     * @param value      打算设置的值
+     * @param yamlToMap  转换成LinkedHashMap的yaml文件
+     * @param outputPath 文件输出路径（如果有的话）
+     * @return boolean
      * @Author Sennri
      * @Description 向下不断使用getValue，得不到时则判断下一个键是否位数字，若为数字创建ArrayList，若为字段创建LinkedHashMap
      * @Date 2020/11/1 22:56
      * @ParamList:
-     * @param key           完整的文件位置（可以省略路径）
-     * @param value         打算设置的值
-     * @param yamlToMap     转换成LinkedHashMap的yaml文件
-     * @param outputPath    文件输出路径（如果有的话）
-     * @return boolean
      */
     public static boolean insertYaml(String key, Object value, Map<String, Object> yamlToMap, String outputPath) throws Exception {
-        if (insertValueToObject(key,value,yamlToMap)){
+        if (insertValueToObject(key, value, yamlToMap)) {
             try {
-                return setMapToYaml(yamlToMap, outputPath); //这个真的会报失败吗？
+                return dumpMapToYaml(yamlToMap, outputPath); //这个真的会报失败吗？
             } catch (IOException e) {
                 e.printStackTrace();
                 log.error("Yaml file insert failed!");
                 return false;
             }
-        }else{
+        } else {
             return false;
         }
     }
 
 
     /**
-     * @Author Sennri
-     * @Description
-     * @Date 2020/11/1 22:55
-     * @ParamList:
      * @param key
      * @param value
      * @param inputPath
      * @param outputPath
      * @return boolean
+     * @Author Sennri
+     * @Description 重载形式二
+     * @Date 2020/11/1 22:55
+     * @ParamList:
      */
     public static boolean insertYaml(String key, Object value, String inputPath, String outputPath) throws Exception {
         Map<String, Object> yamlToMap = getYamlToMap(inputPath);
@@ -331,14 +339,14 @@ public class YamlEditor {
     }
 
     /**
-     * @Author Sennri
-     * @Description
-     * @Date 2020/11/1 22:54
-     * @ParamList:
      * @param key
      * @param value
      * @param inputPath
      * @return boolean
+     * @Author Sennri
+     * @Description
+     * @Date 2020/11/1 22:54
+     * @ParamList:
      */
     public static boolean insertYaml(String key, Object value, String inputPath) throws Exception {
         Map<String, Object> yamlToMap = getYamlToMap(inputPath);
@@ -346,23 +354,12 @@ public class YamlEditor {
     }
 
 
-    /**
-     * @Author Sennri
-     * @Description 
-     * @Date 2020/11/1 23:00
-     * @ParamList: 
-     * @param key
-     * @param inputYamlName
-     * @param outputYamlName
-     * @return boolean
-     */
-    public static boolean removeYamlContent(String key, String inputYamlName, String outputYamlName) throws Exception {
-        Map<String, Object> yamlToMap = getYamlToMap(inputYamlName);
-        if (null == yamlToMap) {
+    public static boolean removeListOrMapContent(String key, Object listOrMap) throws Exception {
+        if (null == listOrMap) {
             return false;
         }
         // 只返回倒数第二级
-        Object target = getValue(key.substring(0, key.lastIndexOf(".")), yamlToMap); //上一级map
+        Object target = getValue(key.substring(0, key.lastIndexOf(".")), listOrMap); //上一级map
         if (target == null) {
             throw new Exception("There is no such a map. Please checkout the key.");
         } else {
@@ -373,8 +370,29 @@ public class YamlEditor {
             else
                 throw new Exception("Error: target must be Map-type or List-type!");
         }
+        return true;
+    }
+
+    /**
+     * @param key
+     * @param inputYamlName
+     * @param outputYamlName
+     * @return boolean
+     * @Author Sennri
+     * @Description
+     * @Date 2020/11/1 23:00
+     * @ParamList:
+     */
+    public static boolean removeYamlContent(String key, String inputYamlName, String outputYamlName) throws Exception {
+        Map<String, Object> yamlToMap = getYamlToMap(inputYamlName);
+        if (yamlToMap == null) {
+            return false;
+        }
+        if (!removeListOrMapContent(key, yamlToMap)) {
+            return false;
+        }
         try {
-            return setMapToYaml(yamlToMap, outputYamlName);
+            return dumpMapToYaml(yamlToMap, outputYamlName);
         } catch (IOException e) {
             e.printStackTrace();
             log.error("Failed to output the content to file!");
