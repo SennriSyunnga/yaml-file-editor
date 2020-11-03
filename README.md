@@ -21,12 +21,14 @@ public static boolean setValue(String key, Object value, Object target) 改
 最下层Value不做要求。复合key用"."隔开，为区分当前对象是数组还是Map，Map的Key值不能为数字
 如下面的取千里这个值，需要用的键为：
 "Service.Profile.Organization.0.campany"
+```yaml
 Service：
     Profile：
         Organization：
             -org1：
                 company：千里
             -org2：
+```
 
 ##TODO
 不支持map对象内使用整形数字作为键。
