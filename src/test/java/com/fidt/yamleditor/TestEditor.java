@@ -2,15 +2,10 @@ package com.fidt.yamleditor;
 import org.junit.Test;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Objects;
-
-import static com.fidt.yamleditor.YamlEditor.getMapFromYaml;
 
 public class TestEditor {
     protected static Log log = LogFactory.getLog(TestEditor.class);
@@ -27,19 +22,27 @@ public class TestEditor {
         log.info(map);
         YamlEditor.insertValueToObject("Organizations.0.ports.0","172.21.18.41",map);
         log.info(map);
-        YamlEditor.setValue("Organizations.0.Name","FIDT",map); //改值测试
+        YamlEditor.insertValueToObject("Organizations.0.ports.1","172.21.18.43",map);
+        log.info(map);
+        YamlEditor.setValue("Organizations.0.Name","千里",map); //改值测试
         YamlEditor.setValue("Organizations.0.ports.1","172.21.18.42",map); //setValue添加key value对测试
         log.info(YamlEditor.getValue("Organizations.0.ports.1",map));
         YamlEditor.removeListOrMapContent("Organizations.1",map);
         log.info(map);
-        String path = (YamlEditor.class.getClassLoader().getResource("templates").getPath()+"/configtx.yaml").substring(1);
-        String path2 = YamlEditor.class.getClassLoader().getResource("templates/configtx.yaml").getPath();
-        log.info(YamlEditor.dumpMapToYaml(map, path));
-        Map temp = getMapFromYaml(path);
+        //URI uri = YamlEditor.class.getClassLoader().getResource("templates/test.yaml").toURI();
+        Path path2 = Paths.get("test.yaml");
+        log.info(YamlEditor.dumpMapToYaml(map, path2));
+        Map temp = YamlEditor.getMapFromYaml(path2);
         log.info(temp);
+        YamlEditor.updateYaml("Organizations.1.Name","夜雨","test.yaml");
+        YamlEditor.insertYaml("Organizations.2.Name","Sennri","test.yaml");
+        YamlEditor.removeListOrMapContent("Organizations",temp);
+        YamlEditor.removeYamlContent("Organizations.0" ,"test.yaml");
         return;
     }
+}
 
+/*
     @Test
     public void testUpdateYaml() throws Exception {
         Map<String, Object> yamlToMap = getMapFromYaml("templates/configtx.yaml");
@@ -99,4 +102,4 @@ public class TestEditor {
         }
         return;
     }
-}
+ */

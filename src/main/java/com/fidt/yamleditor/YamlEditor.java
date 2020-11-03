@@ -12,6 +12,7 @@ import org.yaml.snakeyaml.Yaml;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -22,8 +23,7 @@ import java.util.*;
 //@Component
 
 public class YamlEditor {
-    //protected static Logger log = LoggerFactory.getLogger(YamlEditor.class);
-    protected static Log log = LogFactory.getLog(YamlEditor.class);
+    protected static Log log = LogFactory.getLog(YamlEditor.class);//protected static Logger log = LoggerFactory.getLogger(YamlEditor.class);
 
     private static final DumperOptions dumperOptions = new DumperOptions();
 
@@ -44,15 +44,13 @@ public class YamlEditor {
      */
     // 目前限定是从resource文件夹下取文件
     public static Map<String, Object> getMapFromYaml(String fileName) {
-        LinkedHashMap<String, Object> yamls = new LinkedHashMap<>();
-        // Yaml yaml = new Yaml();
-        // @Cleanup InputStream in = YamlEditor.class.getClassLoader().getResourceAsStream(fileName); // 这里舍弃了@写法
-        try (InputStream in = YamlEditor.class.getClassLoader().getResourceAsStream(fileName)) {
-            yamls = new Yaml().loadAs(in, LinkedHashMap.class); // 这里应该是有问题的？
+        //try (InputStream in = YamlEditor.class.getClassLoader().getResourceAsStream(fileName)) {
+        try (InputStream in = Files.newInputStream(Paths.get(fileName))) {
+            return new Yaml().loadAs(in, LinkedHashMap.class); // 这里应该是有问题的？
         } catch (Exception e) {
             log.error(fileName + " load failed !!!");
+            return null;
         }
-        return yamls;
     }
 
     /**
@@ -83,23 +81,31 @@ public class YamlEditor {
      * @ParamList:
      */
     public static boolean dumpMapToYaml(Map<String, Object> yamls, String fileName) throws IOException {
-        //Yaml yaml = new Yaml(dumperOptions);
-        // 若不存在改文件，则创造文件。该逻辑不会创建不存在的文件夹。
-        Path path = Paths.get(fileName);
-        return dumpMapToYaml(yamls,path);
-//        if (!Files.exists(path)) {
-//            Files.createFile(path);
-//        }
-//        try (BufferedWriter bufferedWriter = Files.newBufferedWriter(path)) {//try (FileWriter fileWriter = new FileWriter(fileName)) {
-//            new Yaml(dumperOptions).dump(yamls, bufferedWriter);
-//            return true;
-//        } catch (IOException e) {
-//            throw new IOException("Cant write content to file!");
-//        }
+        return dumpMapToYaml(yamls,Paths.get(fileName));
     }
 
+    /**
+     * @Author
+     * @Description 接受URI作为参数写入文件
+     * @Date 2020/11/3 11:35
+     * @ParamList:
+     * @param yamls
+     * @param uri
+     * @return boolean
+     */
+    public static boolean dumpMapToYaml(Map<String, Object> yamls, URI uri) throws IOException {
+        return dumpMapToYaml(yamls, Paths.get(uri));
+    }
+    /**
+     * @Author
+     * @Description
+     * @Date 2020/11/3 11:35
+     * @ParamList:
+     * @param yamls
+     * @param path
+     * @return boolean
+     */
     public static boolean dumpMapToYaml(Map<String, Object> yamls, Path path) throws IOException {
-        //Yaml yaml = new Yaml(dumperOptions);
         // 若不存在该文件，则创造文件。该逻辑不会创建不存在的文件夹。
         if (!Files.exists(path)) {
             Files.createFile(path);
@@ -130,6 +136,7 @@ public class YamlEditor {
                 if (object instanceof Map || object instanceof List) { //是Map
                     return getValue(key.substring(key.indexOf(".") + 1), object);
                 } else {
+                    log.error("Key \"" + keys[0] + "\" not found.");
                     return null;
                 }
             } else {
@@ -146,14 +153,14 @@ public class YamlEditor {
                 if (object instanceof Map || object instanceof List) {
                     return getValue(key.substring(key.indexOf(".") + 1), object);
                 } else {
-                    log.error("Cant get the target key.");
+                    log.error("Key chains error. Cant get the target key.");
                     return null;
                 }
             } else {
                 return ((Map) target).get(key);
             }
         } else {
-            throw new Exception("Collection type error. It should be List or Map.");
+            throw new Exception("Type error. It should be List or Map.");
         }
     }
 
@@ -198,7 +205,7 @@ public class YamlEditor {
             if (target instanceof Map) {
                 ((Map) target).put(key, value); //即便没有这个值，也会加上去——有一点风险，感觉不建议这么做。会因为错误操作而改变原有结构。
             } else if (target instanceof List) {
-                if (Integer.parseInt(key) < ((List) target).size() - 1) {
+                if (Integer.parseInt(key) <= ((List) target).size() - 1) {
                     ((List) target).set(Integer.parseInt(key), value);
                 } else { //新增
                     ((List) target).add(value);
@@ -236,20 +243,23 @@ public class YamlEditor {
      * @ParamList:
      */
     public static boolean updateYaml(String key, @Nullable Object value, String yamlName) throws Exception {
-        // getYamlToMap 返回的是Object更合适吧？
         Map<String, Object> yamlToMap = getMapFromYaml(yamlName);
         // if the yaml file is empty, then return false.
-        if (null == yamlToMap) {
+        if (yamlToMap == null) {
             return false;
         }
-        // 返回待取键值所在的Map或者List。
-        // return the Map or List to which the key belong.
+        // 返回待取键值所在的Map或者List  //return the Map or List to which the key belong.
         Object target = getValue(key.substring(0, key.lastIndexOf(".")), yamlToMap);
+
+        if (target == null){
+            log.error("Key chain error.");
+            return false;
+        }
+
         // get the old value from target object.
         Object oldValue = getValue(key.substring(key.lastIndexOf(".") + 1), target); // 对上一级map取key值，得到value
 
-        // 未找到key 返回false
-        // key not found, return false.
+        // 未找到key 返回false // key not found, return false.
         if (oldValue == null) {
             log.error("Key " + key + " is not found.");
             return false;
@@ -262,11 +272,11 @@ public class YamlEditor {
             return false;
         }
 
-        // 这里限定了从classes文件夹下读取文件,substring(1)是为了删除开头getpath得到的多余的"\",这个格式getPath方法是不支持的
-        String path = Objects.requireNonNull(YamlEditor.class.getClassLoader().getResource(yamlName)).getPath().substring(1);//String path = this.getClass().getClassLoader().getResource(yamlName).getPath();
+        // 这里限定了从classes文件夹下读取文件
+        // String path = Objects.requireNonNull(YamlEditor.class.getClassLoader().getResource(yamlName)).getPath().substring(1);//String path = this.getClass().getClassLoader().getResource(yamlName).getPath();
         if (setValue(key.substring(key.lastIndexOf(".") + 1), value, target)) {
             try {
-                return dumpMapToYaml(yamlToMap, path);
+                return dumpMapToYaml(yamlToMap, Paths.get(yamlName));
             } catch (IOException e) {
                 e.printStackTrace();
                 log.error("yaml file update failed !");
@@ -276,7 +286,6 @@ public class YamlEditor {
             }
         } else return false;
     }
-
 
     /**
      * @param key       键
@@ -314,15 +323,14 @@ public class YamlEditor {
         return setValue(keys[keys.length - 1], value, temp); //写入键值,这个真的会报失败吗？
     }
 
-
     /**
-     * @param key        完整的文件位置（可以省略路径）
+     * @param key        完整的键所在路径
      * @param value      打算设置的值
      * @param yamlToMap  转换成LinkedHashMap的yaml文件
      * @param outputPath 文件输出路径（如果有的话）
      * @return boolean
      * @Author Sennri
-     * @Description 向下不断使用getValue，得不到时则判断下一个键是否位数字，若为数字创建ArrayList，若为字段创建LinkedHashMap
+     * @Description 强制性赋值。向下不断使用getValue，得不到时则判断下一个键是否位数字，若为数字创建ArrayList，若为字段创建LinkedHashMap
      * @Date 2020/11/1 22:56
      * @ParamList:
      */
@@ -371,15 +379,30 @@ public class YamlEditor {
         return insertYaml(key, value, yamlToMap, inputPath);
     }
 
-
+    /**
+     * @Author Sennri
+     * @Description 从List对象或者Map对象中一处特定键值
+     * @Date 2020/11/3 10:59
+     * @ParamList:
+     * @param key
+     * @param listOrMap
+     * @return boolean
+     */
     public static boolean removeListOrMapContent(String key, Object listOrMap) throws Exception {
-        if (null == listOrMap) {
+        if (listOrMap == null) {
+            log.info("List or Map is empty.");
             return false;
         }
         // 只返回倒数第二级
-        Object target = getValue(key.substring(0, key.lastIndexOf(".")), listOrMap); //上一级map
+        Object target;
+        if (key.contains(".")){
+            target = getValue(key.substring(0, key.lastIndexOf(".")), listOrMap); //上一级map——如果没有上一级呢？
+        }else{
+            target = listOrMap;
+        }
         if (target == null) {
-            throw new Exception("There is no such a map. Please checkout the key.");
+            log.error("There is no such a map or list to which the key belong. Please check out the key.");
+            return false;
         } else {
             if (target instanceof Map)
                 ((Map) target).remove(key.substring(key.lastIndexOf(".") + 1));
@@ -397,7 +420,7 @@ public class YamlEditor {
      * @param outputYamlName
      * @return boolean
      * @Author Sennri
-     * @Description
+     * @Description         适用于生成新文件的情况
      * @Date 2020/11/1 23:00
      * @ParamList:
      */
@@ -418,10 +441,19 @@ public class YamlEditor {
         }
     }
 
+    /**
+     * @Author Sennri
+     * @Description     重载之一，用于同一文件的读入输出
+     * @Date 2020/11/3 10:30
+     * @ParamList:
+     * @param key
+     * @param yamlName
+     * @return boolean
+     */
     public static boolean removeYamlContent(String key, String yamlName) throws Exception {
         return removeYamlContent(key, yamlName, yamlName);
     }
-
+}
 
 //    public static void main(String[] args) throws Exception {
 //        LinkedHashMap map = new LinkedHashMap();
@@ -444,7 +476,7 @@ public class YamlEditor {
 //        log.info(temp);
 //        return;
 //    }
-}
+
 
 
 //  弃用的代码：Deprecated
