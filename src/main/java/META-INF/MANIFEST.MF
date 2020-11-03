@@ -1,0 +1,7 @@
+Manifest-Version: 1.0
+Class-Path: log4j-1.2.17.jar spring-context-5.2.9.RELEASE.jar spring-bea
+ ns-5.2.9.RELEASE.jar snakeyaml-1.26.jar spring-aop-5.2.9.RELEASE.jar sp
+ ring-core-5.2.9.RELEASE.jar spring-jcl-5.2.9.RELEASE.jar spring-express
+ ion-5.2.9.RELEASE.jar annotations-20.1.0.jar slf4j-log4j12-1.7.2.jar sl
+ f4j-api-1.7.2.jar commons-lang-2.6.jar
+
