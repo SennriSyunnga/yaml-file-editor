@@ -165,7 +165,6 @@ public class YamlEditor {
     }
 
     // TODO: 2020/10/23 这里应该有问题,并不能解决如果下面是一个数组的情况，但是目前应该还没遇到这种情况
-
     /**
      * @param key
      * @param value
@@ -205,7 +204,7 @@ public class YamlEditor {
             if (target instanceof Map) {
                 ((Map) target).put(key, value); //即便没有这个值，也会加上去——有一点风险，感觉不建议这么做。会因为错误操作而改变原有结构。
             } else if (target instanceof List) {
-                if (Integer.parseInt(key) <= ((List) target).size() - 1) {
+                if (Integer.parseInt(key) <= ((List) target).size() - 1) { //若超出既有边界，则改为新增
                     ((List) target).set(Integer.parseInt(key), value);
                 } else { //新增
                     ((List) target).add(value);
@@ -272,8 +271,7 @@ public class YamlEditor {
             return false;
         }
 
-        // 这里限定了从classes文件夹下读取文件
-        // String path = Objects.requireNonNull(YamlEditor.class.getClassLoader().getResource(yamlName)).getPath().substring(1);//String path = this.getClass().getClassLoader().getResource(yamlName).getPath();
+        // 这里限定了从classes文件夹下读取文件，目前注释掉 // String path = Objects.requireNonNull(YamlEditor.class.getClassLoader().getResource(yamlName)).getPath().substring(1);//String path = this.getClass().getClassLoader().getResource(yamlName).getPath();
         if (setValue(key.substring(key.lastIndexOf(".") + 1), value, target)) {
             try {
                 return dumpMapToYaml(yamlToMap, Paths.get(yamlName));
@@ -309,9 +307,9 @@ public class YamlEditor {
                 temp = getValue(keys[i], temp);
             } else if (i <= len - 2) {
                 try {
-                    new Integer(keys[i + 1]); // 若当前键的下一个键为数字，意味着当前本该得到却没有提取到的temp实际上是一个ArrayList
+                    new Integer(keys[i + 1]); // 若当前键的下一个键为整形数字，意味着当前本该得到却没有提取到的temp实际上是一个ArrayList
                     ArrayList<Object> list = new ArrayList<>();
-                    setValue(keys[i], list, temp);
+                    setValue(keys[i], list, temp); // 单层的set应该没有会报错的情况，这里的set
                     temp = list;
                 } catch (Exception e) {
                     Map<String, Object> map = new LinkedHashMap<>();
