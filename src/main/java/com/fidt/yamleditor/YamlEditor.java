@@ -34,6 +34,8 @@ public class YamlEditor {
         dumperOptions.setPrettyFlow(false);
     }
 
+    private YamlEditor(){}
+
     /**
      * @param fileName 默认是resources目录下的yaml文件, 如果yaml文件在resources子目录下，需要加上子目录 比如：conf/config.yaml
      * @return java.util.Map<java.lang.String, java.lang.Object>
@@ -175,7 +177,7 @@ public class YamlEditor {
      * @ParamList:
      **/
     @Deprecated
-    public Map<String, Object> generateMap(String key, Object value) {
+    public static Map<String, Object> generateMap(String key, Object value) {
         Map<String, Object> result = new LinkedHashMap<>();
         String[] keys = key.split("[.]");
         result.put(keys[keys.length - 1], value);
