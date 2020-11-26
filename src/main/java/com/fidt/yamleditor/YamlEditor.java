@@ -12,6 +12,7 @@ import org.yaml.snakeyaml.Yaml;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.annotation.Target;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -233,6 +234,7 @@ public class YamlEditor {
             }
         }
     }
+
 
     /**
      * @param key      key是properties的方式： aaa.bbb.ccc (key不存在不修改)
