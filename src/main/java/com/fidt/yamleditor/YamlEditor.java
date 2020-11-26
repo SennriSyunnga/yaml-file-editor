@@ -134,7 +134,7 @@ public class YamlEditor {
         if (target instanceof List) {
             if (key.contains(".")) {
                 String[] keys = key.split("[.]");
-                Object object = ((List) target).get(Integer.parseInt(keys[0]));
+                Object object = ((List<Object>) target).get(Integer.parseInt(keys[0]));
                 if (object instanceof Map || object instanceof List) { //是Map
                     return getValue(key.substring(key.indexOf(".") + 1), object);
                 } else {
@@ -143,7 +143,7 @@ public class YamlEditor {
                 }
             } else {
                 try {
-                    return ((List) target).get(Integer.parseInt(key));
+                    return ((List<Object>) target).get(Integer.parseInt(key));
                 } catch (IndexOutOfBoundsException e) { // 若超出index，也返回null，这逻辑和Map保持一致
                     return null;
                 }
@@ -151,7 +151,7 @@ public class YamlEditor {
         } else if (target instanceof Map) {
             if (key.contains(".")) {
                 String[] keys = key.split("[.]");
-                Object object = ((Map) target).get(keys[0]);
+                Object object = ((Map<String,Object>) target).get(keys[0]);
                 if (object instanceof Map || object instanceof List) {
                     return getValue(key.substring(key.indexOf(".") + 1), object);
                 } else {
@@ -159,9 +159,10 @@ public class YamlEditor {
                     return null;
                 }
             } else {
-                return ((Map) target).get(key);
+                return ((Map<String,Object>) target).get(key);
             }
         } else {
+            // todo 应该抛出可读性更高的特定异常名
             throw new Exception("Type error. It should be List or Map.");
         }
     }
@@ -204,24 +205,24 @@ public class YamlEditor {
             return false;
         if (!key.contains(".")) { //说明到达最底的键
             if (target instanceof Map) {
-                ((Map) target).put(key, value); //即便没有这个值，也会加上去——有一点风险，感觉不建议这么做。会因为错误操作而改变原有结构。
-            } else if (target instanceof List) {
-                if (Integer.parseInt(key) <= ((List) target).size() - 1) { //若超出既有边界，则改为新增
-                    ((List) target).set(Integer.parseInt(key), value);
+                ((Map<String,Object>) target).put(key, value); //即便没有这个值，也会加上去——有一点风险，感觉不建议这么做。会因为错误操作而改变原有结构。
+            } else if (target instanceof List<?>) {
+                if (Integer.parseInt(key) <= ((List<Object>) target).size() - 1) { //若超出既有边界，则改为新增
+                    ((List<Object>) target).set(Integer.parseInt(key), value);
                 } else { //新增
-                    ((List) target).add(value);
+                    ((List<Object>) target).add(value);
                 }
             } else {
                 throw new Exception("Error: target must be Map-type or List-type!");
             }
             return true; // 设置成功
-        } else {
+        } else { //未到达最底层
             String[] keys = key.split("[.]");
             Object object;
             if (target instanceof Map) {
-                object = ((Map) target).get(keys[0]);
+                object = ((Map<String,Object>) target).get(keys[0]);
             } else if (target instanceof List)
-                object = ((List) target).get(Integer.parseInt(keys[0]));
+                object = ((List<Object>) target).get(Integer.parseInt(keys[0]));
             else {
                 throw new Exception("Error: target must be Map-type or List-type!");
             }
@@ -250,12 +251,13 @@ public class YamlEditor {
             return false;
         }
         // 返回待取键值所在的Map或者List  //return the Map or List to which the key belong.
-        Object target = getValue(key.substring(0, key.lastIndexOf(".")), yamlToMap);
+        // 这里改为直接抛异常，因为没有这个键。
+        Object target = Objects.requireNonNull(getValue(key.substring(0, key.lastIndexOf(".")), yamlToMap));
 
-        if (target == null){
-            log.error("Key chain error.");
-            return false;
-        }
+//        if (target == null){
+//            log.error("Key chain error.");
+//            return false;
+//        }
 
         // get the old value from target object.
         Object oldValue = getValue(key.substring(key.lastIndexOf(".") + 1), target); // 对上一级map取key值，得到value
@@ -298,7 +300,7 @@ public class YamlEditor {
      * @ParamList:
      */
     public static boolean insertValueToObject(String key, Object value, Object listOrMap) throws Exception {
-        if (key.isEmpty()) //因为这个函数会复用，所以空判断在这里进行即可
+        if (key.isEmpty()) //因为这个函数 可能 会复用，所以空判断在这里进行即可？
             return false;
         String[] keys = key.split("[.]");
         int len = keys.length;
@@ -405,9 +407,9 @@ public class YamlEditor {
             return false;
         } else {
             if (target instanceof Map)
-                ((Map) target).remove(key.substring(key.lastIndexOf(".") + 1));
+                ((Map<String,Object>) target).remove(key.substring(key.lastIndexOf(".") + 1));
             else if (target instanceof List)
-                ((List) target).remove(Integer.parseInt(key.substring(key.lastIndexOf(".") + 1)));
+                ((List<Object>) target).remove(Integer.parseInt(key.substring(key.lastIndexOf(".") + 1)));
             else
                 throw new Exception("Error: target must be Map-type or List-type!");
         }
