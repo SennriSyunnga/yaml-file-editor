@@ -12,7 +12,8 @@ public class TestEditor {
 
     @Test
     public void test() throws Exception {
-        LinkedHashMap map = new LinkedHashMap();
+        //Map map = YamlEditor.getMapFromYaml("test.yaml");
+        Map map = new LinkedHashMap();
         Object object=YamlEditor.getValue("s",map);//取空值测试
         YamlEditor.insertValueToObject("Organizations.0.Name","org1",map); //创建新路径测试
         log.info(map);
