@@ -45,10 +45,10 @@ public class YamlEditor {
      * @Date 2020/11/1 22:48
      * @ParamList:
      */
-    // 目前限定是从resource文件夹下取文件
     public static Map<String, Object> getMapFromYaml(String fileName) {
         //try (InputStream in = YamlEditor.class.getClassLoader().getResourceAsStream(fileName)) {
         try (InputStream in = Files.newInputStream(Paths.get(fileName))) {
+            // 这里可以考虑改一下？
             return new Yaml().loadAs(in, LinkedHashMap.class); // 这里应该是有问题的？
         } catch (Exception e) {
             log.error(fileName + " load failed !!!");
@@ -207,7 +207,7 @@ public class YamlEditor {
         if (!key.contains(".")) { //说明到达最底的键
             if (target instanceof Map) {
                 ((Map<String,Object>) target).put(key, value); //即便没有这个值，也会加上去——有一点风险，感觉不建议这么做。会因为错误操作而改变原有结构。
-            } else if (target instanceof List<?>) {
+            } else if (target instanceof List) {
                 if (Integer.parseInt(key) <= ((List<Object>) target).size() - 1) { //若超出既有边界，则改为新增
                     ((List<Object>) target).set(Integer.parseInt(key), value);
                 } else { //新增
@@ -307,23 +307,24 @@ public class YamlEditor {
         String[] keys = key.split("[.]");
         int len = keys.length;
         Object temp = listOrMap;
-
-        for (int i = 0; i < len; i++) { //
-            if ((getValue(keys[i], temp)) != null) {
+        // TODO: 2020/11/27 这里进行了一个循环位置数量的修改：从 i<len改为 i<len-1
+        for (int i = 0; i < len - 1; i++) { //
+            if ((getValue(keys[i], temp)) != null) { //len-1的时候应该特殊处理
                 temp = getValue(keys[i], temp);
-            } else if (i <= len - 2) {
+            } else {
                 try {
                     new Integer(keys[i + 1]); // 若当前键的下一个键为整形数字，意味着当前本该得到却没有提取到的temp实际上是一个ArrayList
                     ArrayList<Object> list = new ArrayList<>();
                     setValue(keys[i], list, temp); // 单层的set应该没有会报错的情况，这里的set
                     temp = list;
                 } catch (Exception e) {
-                    Map<String, Object> map = new LinkedHashMap<>();
+                    Map<String, Object> map = new LinkedHashMap<>(); // 插入一个newlinkedhashMap
                     setValue(keys[i], map, temp);
                     temp = map;
                 }
             }
         }
+        //此时i=len-1，出循环
         return setValue(keys[keys.length - 1], value, temp); //写入键值,这个真的会报失败吗？
     }
 
