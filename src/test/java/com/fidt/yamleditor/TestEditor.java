@@ -12,8 +12,8 @@ public class TestEditor {
 
     @Test
     public void test() throws Exception {
-        //Map map = YamlEditor.getMapFromYaml("test.yaml");
-        Map map = new LinkedHashMap();
+        Map map = YamlEditor.getMapFromYaml("test.yaml");
+        //Map map = new LinkedHashMap();
         Object object=YamlEditor.getValue("s",map);//取空值测试
         YamlEditor.insertValueToObject("Organizations.0.Name","org1",map); //创建新路径测试
         log.info(map);
@@ -36,8 +36,8 @@ public class TestEditor {
         Map temp = YamlEditor.getMapFromYaml(path2);
         log.info(temp);
         YamlEditor.updateYaml("Organizations.1.Name","夜雨","test.yaml");
-        YamlEditor.insertYaml("Organizations.2.Name","Sennri","test.yaml");
-        YamlEditor.removeListOrMapContent("Organizations",temp);
+        YamlEditor.insertYaml("Organizations.2.Name","Sennri","test.yaml");//覆盖值
+        YamlEditor.removeListOrMapContent("Organizations",temp);//这里没有dump吧。
         YamlEditor.removeYamlContent("Organizations.0" ,"test.yaml");
         return;
     }

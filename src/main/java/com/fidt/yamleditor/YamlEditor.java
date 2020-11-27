@@ -48,6 +48,7 @@ public class YamlEditor {
     public static Map<String, Object> getMapFromYaml(String fileName) {
         //try (InputStream in = YamlEditor.class.getClassLoader().getResourceAsStream(fileName)) {
         try (InputStream in = Files.newInputStream(Paths.get(fileName))) {
+            // 这里可以考虑改一下？
             return new Yaml().loadAs(in, LinkedHashMap.class); // 这里应该是有问题的？
         } catch (Exception e) {
             log.error(fileName + " load failed !!!");
