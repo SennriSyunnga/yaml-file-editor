@@ -201,6 +201,9 @@ public class YamlEditor {
      * @Date 2020/11/1 22:45
      * @ParamList:
      */
+    //todo 该怎么处理这种呢？YamlEditor.setValue("Organizations", org, map);
+    // 显然我们既没有必要，也没有简洁的方法直到organizations到底有多少个成员，在进行一个这样的插入之前，我们首先得getOrganization的size
+    // 才能生成一个插入的键。这需要我们首先在清除这个map里有多少成员的情况下进行，首先，这就是不合理的。
     public static boolean setValue(String key, Object value, Object target) throws Exception {
         if (key.isEmpty()) //为了复用
             return false;
@@ -208,9 +211,10 @@ public class YamlEditor {
             if (target instanceof Map) {
                 ((Map<String,Object>) target).put(key, value); //即便没有这个值，也会加上去——有一点风险，感觉不建议这么做。会因为错误操作而改变原有结构。
             } else if (target instanceof List) {
-                if (Integer.parseInt(key) <= ((List<Object>) target).size() - 1) { //若超出既有边界，则改为新增
-                    ((List<Object>) target).set(Integer.parseInt(key), value);
-                } else { //新增
+                int index = Integer.parseInt(key);
+                if (0 <= index && index <= ((List<Object>) target).size() - 1) {
+                    ((List<Object>) target).set(index, value);
+                } else { //若超出既有列表边界，又或者键为负，则为新增。
                     ((List<Object>) target).add(value);
                 }
             } else {
