@@ -51,6 +51,7 @@ public class YamlEditor {
             // 这里可以考虑改一下？
             return new Yaml().loadAs(in, LinkedHashMap.class); // 这里应该是有问题的？
         } catch (Exception e) {
+            // todo 这里或许不该catch，应该抛出去给上一级catch
             log.error(fileName + " load failed !!!");
             return null;
         }
@@ -131,7 +132,7 @@ public class YamlEditor {
      * @Date 2020/11/1 22:50
      * @ParamList:
      */
-    public static Object getValue(String key, Object target) throws Exception {
+    public static Object getValue(String key, Object target) throws IllegalArgumentException{
         if (target instanceof List) {
             if (key.contains(".")) {
                 String[] keys = key.split("[.]");
@@ -140,13 +141,14 @@ public class YamlEditor {
                     return getValue(key.substring(key.indexOf(".") + 1), object);
                 } else {
                     log.error("Key \"" + keys[0] + "\" not found.");
-                    return null;
+                    return null; // todo
                 }
             } else {
                 try {
                     return ((List<Object>) target).get(Integer.parseInt(key));
                 } catch (IndexOutOfBoundsException e) { // 若超出index，也返回null，这逻辑和Map保持一致
-                    return null;
+                    e.printStackTrace();
+                    return null; // todo
                 }
             }
         } else if (target instanceof Map) {
@@ -164,7 +166,7 @@ public class YamlEditor {
             }
         } else {
             // todo 应该抛出可读性更高的特定异常名
-            throw new Exception("Type error. It should be List or Map.");
+            throw new IllegalArgumentException("Target type do not match. The result should be List or Map, maybe you use wrong key?");
         }
     }
 
@@ -196,16 +198,14 @@ public class YamlEditor {
      * @param value  目标值
      * @return boolean
      * @Author Sennri
-     * @Description 向target内寻找键值key，若key为复合形式，则一直向下取键，获得value值，若中途的路径不存在则返回false
-     * 如果只是最下级的键不存在，会put该键。这个函数可以在最底层进行put
+     * @Description 向target内寻找键值key，若key为复合形式，则一直向下取键，获得中间的value值，若这中间发现某个键在递归途中实际上不存在，则返回false
+     * 如果只是最下级的键不存在，会直接put该键。因此也可以用这个函数在最底层进行put操作
      * @Date 2020/11/1 22:45
      * @ParamList:
      */
-    //todo 该怎么处理这种呢？YamlEditor.setValue("Organizations", org, map);
-    // 显然我们既没有必要，也没有简洁的方法直到organizations到底有多少个成员，在进行一个这样的插入之前，我们首先得getOrganization的size
-    // 才能生成一个插入的键。这需要我们首先在清除这个map里有多少成员的情况下进行，首先，这就是不合理的。
+    //todo 这里增加了
     public static boolean setValue(String key, Object value, Object target) throws Exception {
-        if (key.isEmpty()) //为了复用
+        if (key.isEmpty()) // 为了复用该函数来进行普通的put操作
             return false;
         if (!key.contains(".")) { //说明到达最底的键
             if (target instanceof Map) {
@@ -229,6 +229,7 @@ public class YamlEditor {
             } else if (target instanceof List)
                 object = ((List<Object>) target).get(Integer.parseInt(keys[0]));
             else {
+                //todo Exception特化
                 throw new Exception("Error: target must be Map-type or List-type!");
             }
             if (object == null) {
@@ -343,7 +344,11 @@ public class YamlEditor {
      * @Date 2020/11/1 22:56
      * @ParamList:
      */
-    public static boolean insertYaml(String key, Object value, Map<String, Object> yamlToMap, String outputPath) throws Exception {
+    public static boolean insertYaml(String key,
+                                     Object value,
+                                     Map<String, Object> yamlToMap,
+                                     String outputPath)
+            throws Exception {
         if (insertValueToObject(key, value, yamlToMap)) {
             try {
                 return dumpMapToYaml(yamlToMap, outputPath); //这个真的会报失败吗？
@@ -358,17 +363,21 @@ public class YamlEditor {
     }
 
     /**
-     * @param key
-     * @param value
-     * @param inputPath
-     * @param outputPath
+     * @param key 键
+     * @param value 值
+     * @param inputPath 输入路径（含文件名）
+     * @param outputPath 输出路径（含文件名）
      * @return boolean
      * @Author Sennri
      * @Description 重载形式二
      * @Date 2020/11/1 22:55
      * @ParamList:
      */
-    public static boolean insertYaml(String key, Object value, String inputPath, String outputPath) throws Exception {
+    public static boolean insertYaml(String key,
+                                     Object value,
+                                     String inputPath,
+                                     String outputPath)
+            throws Exception {
         Map<String, Object> yamlToMap = getMapFromYaml(inputPath);
         return insertYaml(key, value, yamlToMap, outputPath);
     }
@@ -383,7 +392,10 @@ public class YamlEditor {
      * @Date 2020/11/1 22:54
      * @ParamList:
      */
-    public static boolean insertYaml(String key, Object value, String inputPath) throws Exception {
+    public static boolean insertYaml(String key,
+                                     Object value,
+                                     String inputPath)
+            throws Exception {
         Map<String, Object> yamlToMap = getMapFromYaml(inputPath);
         return insertYaml(key, value, yamlToMap, inputPath);
     }
