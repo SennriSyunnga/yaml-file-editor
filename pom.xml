@@ -36,7 +36,6 @@
             <name>nexus</name>
             <url>https://artifacts.alfresco.com/nexus/content/repositories/public/</url>
         </repository>
-
     </repositories>
     <groupId>FIDT</groupId>
     <artifactId>yamlEditor</artifactId>
