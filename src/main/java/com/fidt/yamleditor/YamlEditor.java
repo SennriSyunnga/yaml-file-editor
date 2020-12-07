@@ -80,13 +80,28 @@ public class YamlEditor {
      * @param fileName
      * @return boolean
      * @Author Sennri
-     * @Description 通用部分：将map存入fileName当中
+     * @Description 将Map存入fileName指定的文件当中
      * @Date 2020/11/1 22:49
      * @ParamList:
      */
     public static boolean dumpMapToYaml(Map<String, Object> yamls, String fileName) throws IOException {
-        return dumpMapToYaml(yamls,Paths.get(fileName));
+        return dumpMapToYaml(yamls,fileName,false);
     }
+
+    /**
+     * @Author
+     * @Description 判断：是否连目录一起创建
+     * @Date 2020/12/7 15:51
+     * @ParamList:
+     * @param yamls
+     * @param fileName
+     * @param isForced
+     * @return boolean
+     */
+    public static boolean dumpMapToYaml(Map<String, Object> yamls, String fileName, boolean isForced) throws IOException {
+        return dumpMapToYaml(yamls,Paths.get(fileName),isForced);
+    }
+
 
     /**
      * @Author
@@ -120,6 +135,26 @@ public class YamlEditor {
         } catch (IOException e) {
             throw new IOException("Cant write content to file!");
         }
+    }
+
+    /**
+     * @Author Sennri
+     * @Description
+     * @Date 2020/12/7 16:12
+     * @ParamList:
+     * @param yamls
+     * @param path
+     * @param isForced 是否强制添加路径（如果路径中文件夹不存在）
+     * @return boolean
+     */
+    public static boolean dumpMapToYaml(Map<String, Object> yamls, Path path, boolean isForced) throws IOException {
+        // 若不存在该文件，则创造文件。该逻辑不会创建不存在的文件夹。
+        if (Files.exists(path.getParent())) {
+            return dumpMapToYaml(yamls, path);
+        } else if (isForced){
+            Files.createDirectory(path.getParent()); //未经测试，不能保证功能符合预期。
+        }
+        return dumpMapToYaml(yamls, path);
     }
 
 
