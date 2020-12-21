@@ -1,7 +1,7 @@
 <component name="ArtifactManager">
-  <artifact name="yaml-editor:jar">
+  <artifact type="jar" name="yaml-editor:jar">
     <output-path>$PROJECT_DIR$/out/artifacts/yaml_editor_jar</output-path>
-    <root id="root">
+    <root id="archive" name="yaml-editor_jar.jar">
       <element id="archive" name="yaml-editor.jar">
         <element id="module-output" name="yaml-editor" />
         <element id="directory" name="lib">

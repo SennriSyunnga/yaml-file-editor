@@ -45,16 +45,8 @@ public class YamlEditor {
      * @Date 2020/11/1 22:48
      * @ParamList:
      */
-    public static Map<String, Object> getMapFromYaml(String fileName) {
-        //try (InputStream in = YamlEditor.class.getClassLoader().getResourceAsStream(fileName)) {
-        try (InputStream in = Files.newInputStream(Paths.get(fileName))) {
-            // 这里可以考虑改一下？
-            return new Yaml().loadAs(in, LinkedHashMap.class); // 这里应该是有问题的？
-        } catch (Exception e) {
-            // todo 这里或许不该catch，应该抛出去给上一级catch
-            log.error(fileName + " load failed !!!");
-            return null;
-        }
+    public static Map<String, Object> getMapFromYaml(String fileName) throws IOException {
+        return getMapFromYaml(Paths.get(fileName));
     }
 
     /**
@@ -65,14 +57,16 @@ public class YamlEditor {
      * @param path
      * @return java.util.Map<java.lang.String,java.lang.Object>
      */
-    public static Map<String, Object> getMapFromYaml(Path path) {
-        LinkedHashMap<String, Object> yamls = new LinkedHashMap<>();
+    public static Map<String, Object> getMapFromYaml(Path path) throws IOException {
         try (InputStream in = Files.newInputStream(path)) {
-            yamls = new Yaml().loadAs(in, LinkedHashMap.class); // 这里应该是有问题的？
-        } catch (Exception e) {
-            log.error(path + " load failed !!!");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> yamlMap = new Yaml().loadAs(in, LinkedHashMap.class); // 这里应该是有问题的？
+            return yamlMap;
+        } catch (IOException e) {
+            log.error(path + " load failed !");
+            e.printStackTrace();
+            throw e;
         }
-        return yamls;
     }
 
     /**
@@ -253,7 +247,7 @@ public class YamlEditor {
                     ((List<Object>) target).add(value);
                 }
             } else {
-                throw new Exception("Error: target must be Map-type or List-type!");
+                throw new Exception("Error: The type of target is expected as Map or List!");
             }
             return true; // 设置成功
         } else { //未到达最底层
