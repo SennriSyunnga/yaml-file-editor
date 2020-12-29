@@ -80,13 +80,13 @@ public class YamlEditor {
     }
 
     /**
+     * 将Map存入fileName指定的文件当中，需要判断：是否连目录一起创建
      * @Author
-     * @Description 判断：是否连目录一起创建
      * @Date 2020/12/7 15:51
      * @ParamList:
-     * @param yamls
-     * @param fileName
-     * @param isForced
+     * @param yamls map or list, commonly LinkedHashMap
+     * @param fileName  路径+文件名
+     * @param isForced  强制创建相关目录
      * @return void
      */
     public static void dumpMapToYaml(Map<String, Object> yamls, String fileName, boolean isForced) throws IOException {
