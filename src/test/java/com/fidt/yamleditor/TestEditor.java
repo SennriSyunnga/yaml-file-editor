@@ -32,7 +32,7 @@ public class TestEditor {
         log.info(map);
         //URI uri = YamlEditor.class.getClassLoader().getResource("templates/test.yaml").toURI();
         Path path2 = Paths.get("test.yaml");
-        log.info(YamlEditor.dumpMapToYaml(map, path2));
+        YamlEditor.dumpMapToYaml(map, path2);
         Map temp = YamlEditor.getMapFromYaml(path2);
         log.info(temp);
         YamlEditor.updateYaml("Organizations.1.Name","夜雨","test.yaml");
