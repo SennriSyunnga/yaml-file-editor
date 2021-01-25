@@ -12,10 +12,7 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.nio.file.Files;
-import java.nio.file.NoSuchFileException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.*;
 import java.util.*;
 
 
@@ -81,6 +78,7 @@ public class YamlEditor {
 
     /**
      * 将Map存入fileName指定的文件当中，需要判断：是否连目录一起创建
+     *
      * @Author
      * @Date 2020/12/7 15:51
      * @ParamList:
@@ -95,12 +93,13 @@ public class YamlEditor {
 
 
     /**
+     * 以URI作为参数确定输出文件路径,将yamlMap写入文件
+     *
      * @Author
-     * @Description 接受URI作为参数写入文件
      * @Date 2020/11/3 11:35
      * @ParamList:
-     * @param yamls
-     * @param uri
+     * @param yamls map形式存储的YAML文件内容
+     * @param uri   输出文件uri
      * @return void
      */
     public static void dumpMapToYaml(Map<String, Object> yamls, URI uri) throws IOException {
@@ -108,8 +107,9 @@ public class YamlEditor {
     }
 
     /**
+     * 以Path为参数，将yamlMap写入文件
+     *
      * @Author
-     * @Description
      * @Date 2020/11/3 11:35
      * @ParamList:
      * @param yamls yaml map
@@ -118,8 +118,9 @@ public class YamlEditor {
      */
     public static void dumpMapToYaml(Map<String, Object> yamls, Path path) throws IOException {
         // 若不存在该文件，则创造文件。该逻辑不会创建不存在的文件夹。
-        if (!Files.exists(path)) {
+        try {
             Files.createFile(path);
+        } catch (FileAlreadyExistsException ignored) {
         }
         try (BufferedWriter bufferedWriter = Files.newBufferedWriter(path)) {//try (FileWriter fileWriter = new FileWriter(fileName)) {
             new Yaml(dumperOptions).dump(yamls, bufferedWriter);
@@ -129,22 +130,23 @@ public class YamlEditor {
     }
 
     /**
+     * 以Path为参数，将yamlMap写入文件
+     *
      * @Author Sennri
-     * @Description
      * @Date 2020/12/7 16:12
      * @ParamList:
-     * @param yamls
-     * @param path
+     * @param yamls map形式存储的YAML文件内容
+     * @param path  Path形式的文件路径
      * @param isForced 是否强制添加路径（如果路径中文件夹不存在）
      * @return void
      */
     public static void dumpMapToYaml(Map<String, Object> yamls, Path path, boolean isForced) throws IOException {
         // 若不存在该文件，则创造文件。该逻辑不会创建不存在的文件夹。
-        Path parentPath = path.getParent();
+        Path parentPath = path.toAbsolutePath().getParent();
         if (Files.exists(parentPath)) {
             dumpMapToYaml(yamls, path);
         } else if (isForced) {
-            Files.createDirectory(path.getParent()); //未经测试，不能保证功能符合预期。
+            Files.createDirectories(path.getParent()); //未经测试，不能保证功能符合预期。
             dumpMapToYaml(yamls, path);
         } else {
             throw new NoSuchFileException(parentPath.toString() + " does not exist.");
@@ -161,15 +163,16 @@ public class YamlEditor {
      * @return java.lang.Object
      * @Date 2020/11/1 22:50
      */
-    @SuppressWarnings("unchecked")
     public static Object getValue(String key, Object target)
             throws IllegalArgumentException {
         if (target instanceof List) {
+            @SuppressWarnings("unchecked")
+            List<Object> list = (List<Object>) target;
             if (key.contains(".")) {
                 String[] keys = key.split("[.]");
                 Object object;
                 try {
-                    object = ((List<Object>) target).get(Integer.parseInt(keys[0]));
+                    object = list.get(Integer.parseInt(keys[0]));
                 } catch (IndexOutOfBoundsException e) {
                     log.error("Key \"" + keys[0] + "\" is error.");
                     throw new IllegalArgumentException("Using a wrong index which is out of bounds: " + keys[0]);
@@ -181,18 +184,20 @@ public class YamlEditor {
                 }
             } else {
                 try {
-                    return ((List<Object>) target).get(Integer.parseInt(key));
+                    return list.get(Integer.parseInt(key));
                 } catch (IndexOutOfBoundsException e) { // 若超出index，也返回null，这逻辑和Map保持一致
                     throw new IllegalArgumentException("Using a wrong index which is out of bounds: " + key);
                 }
             }
         } else if (target instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> map = ((Map<String, Object>) target);
             if (key.contains(".")) {
                 String[] keys = key.split("[.]");
-                if (!((Map<String, Object>) target).containsKey(keys[0])) {
+                if (!map.containsKey(keys[0])) {
                     throw new IllegalArgumentException("Using a wrong key which is not in the map: " + keys[0]);
                 }
-                Object object = ((Map<String, Object>) target).get(keys[0]); //如果结果为null怎么办？
+                Object object = map.get(keys[0]); //如果结果为null怎么办？
                 if (object instanceof Map || object instanceof List) {
                     return getValue(key.substring(key.indexOf(".") + 1), object);
                 } else {
@@ -200,10 +205,10 @@ public class YamlEditor {
                     throw new IllegalClassException("Target type is not supported. It should be List or Map, maybe you use a wrong key?");
                 }
             } else {
-                if (!((Map<String, Object>) target).containsKey(key)) {
+                if (!map.containsKey(key)) {
                     throw new IllegalArgumentException("Using a wrong key which is not in the map: " + key);
                 } else {
-                    return ((Map<String, Object>) target).get(key);
+                    return map.get(key);
                 }
             }
         } else {
@@ -212,8 +217,10 @@ public class YamlEditor {
     }
 
     // TODO: 2020/10/23 这里应该有问题,并不能解决如果下面是一个数组的情况，但是目前应该还没遇到这种情况
+
     /**
      * 使用递归的方式设置map中的值，仅适合单一属性 key的格式: "server.port"
+     *
      * @Author Sennri
      * @param key
      * @param value
@@ -235,6 +242,7 @@ public class YamlEditor {
     /**
      * 向target内寻找键值key，若key为复合形式，则一直向下取键，获得中间的value值，若这中间发现某个键在递归途中实际上不存在，则返回false
      * 如果只是最下级的键不存在，会直接put该键。因此也可以用这个函数在最底层进行put操作
+     *
      * @Author Sennri
      * @ParamList:
      * @param target 需要进行键值修改的待操作对象
@@ -242,19 +250,22 @@ public class YamlEditor {
      * @param value  目标值
      * @Date 2020/11/1 22:45
      */
-    @SuppressWarnings("unchecked")
     public static void setValue(String key, Object value, Object target) throws IllegalClassException {
         if (key.isEmpty()) // 为了复用该函数来进行普通的put操作
             throw new NullPointerException();
         if (!key.contains(".")) { //说明到达最底的键
             if (target instanceof Map) {
-                ((Map<String, Object>) target).put(key, value); // todo：即便没有这个键值对，也会加上去。有一点风险，感觉不建议这么做。可能会因为错误操作而改变原有数据结构。
+                @SuppressWarnings("unchecked")
+                Map<String, Object> map = ((Map<String, Object>) target);
+                map.put(key, value); // todo：即便没有这个键值对，也会加上去。有一点风险，感觉不建议这么做。可能会因为错误操作而改变原有数据结构。
             } else if (target instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<Object> list = (List<Object>) target;
                 int index = Integer.parseInt(key);
-                if (0 <= index && index <= ((List<Object>) target).size() - 1) {
-                    ((List<Object>) target).set(index, value);
+                if (0 <= index && index <= list.size() - 1) {
+                    list.set(index, value);
                 } else { //若超出既有列表边界，又或者键为负，则为新增。
-                    ((List<Object>) target).add(value);
+                    list.add(value);
                 }
             } else {
                 throw new IllegalClassException("Error: target must be Map or List type!");
@@ -263,10 +274,14 @@ public class YamlEditor {
             String[] keys = key.split("[.]");
             Object object;
             if (target instanceof Map) {
-                object = ((Map<String, Object>) target).get(keys[0]);
-            } else if (target instanceof List)
-                object = ((List<Object>) target).get(Integer.parseInt(keys[0]));
-            else {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> map = ((Map<String, Object>) target);
+                object = map.get(keys[0]);
+            } else if (target instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<Object> list = (List<Object>) target;
+                object = list.get(Integer.parseInt(keys[0]));
+            } else {
                 throw new IllegalClassException("Error: target must be Map or List type!");
             }
             if (object == null) {
@@ -280,6 +295,7 @@ public class YamlEditor {
 
     /**
      * 更新yaml文件中的特定键，如果键不存在则不修改（不赋值），如果存在则更换为新值。
+     *
      * @Author Sennri
      * @Date 2020/11/1 22:53
      * @ParamList
@@ -314,6 +330,7 @@ public class YamlEditor {
 
     /**
      * 采用递归方法向下赋值, 遇到不存在的Key路径将强制存在生成路径对应的对象
+     *
      * @Author Sennri
      * @ParamList:
      * @param key       键
@@ -350,7 +367,9 @@ public class YamlEditor {
     }
 
     /**
-     * 读取map内容并强制性赋值；向下不断使用getValue，若当前键不存在时，则判断下一个键是否位整形数字，若为数字创建ArrayList，若为字段创建LinkedHashMap
+     * 读取map内容并强制性赋值；向下不断使用getValue，
+     * 若当前键不存在时，则判断下一个键是否位整形数字，若为数字创建ArrayList，若为字段创建LinkedHashMap
+     *
      * @Author Sennri
      * @ParamList:
      * @param key        完整的键所在路径
@@ -370,6 +389,7 @@ public class YamlEditor {
 
     /**
      * 重载形式二
+     *
      * @Author Sennri
      * @ParamList:
      * @param key 键
@@ -389,6 +409,8 @@ public class YamlEditor {
     }
 
     /**
+     * 向特定yaml文件中插入一组键值对，并更新在原文件上
+     *
      * @ParamList:
      * @param key
      * @param value
@@ -401,12 +423,12 @@ public class YamlEditor {
                                   Object value,
                                   String inputPath)
             throws IOException {
-        Map<String, Object> yamlToMap = getMapFromYaml(inputPath);
-        insertYaml(key, value, yamlToMap, inputPath);
+        insertYaml(key, value, inputPath, inputPath);
     }
 
     /**
-     * 从List对象或者Map对象中一处特定键值
+     * 从List对象或者Map对象中移除特定键值对
+     *
      * @Author Sennri
      * @Date 2020/11/3 10:59
      * @ParamList:
@@ -423,21 +445,26 @@ public class YamlEditor {
             target = listOrMap;
         }
         Objects.requireNonNull(target);
-        if (target instanceof Map)
-            ((Map<String, Object>) target).remove(key.substring(key.lastIndexOf(".") + 1));
-        else if (target instanceof List)
-            ((List<Object>) target).remove(Integer.parseInt(key.substring(key.lastIndexOf(".") + 1)));
-        else
+        if (target instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> map = (Map<String, Object>) target;
+            map.remove(key.substring(key.lastIndexOf(".") + 1));
+        } else if (target instanceof List) {
+            @SuppressWarnings("unchecked")
+            List<Object> list = ((List<Object>) target);
+            list.remove(Integer.parseInt(key.substring(key.lastIndexOf(".") + 1)));
+        } else
             throw new IllegalClassException("Error: target must be Map-type or List-type!");
     }
 
     /**
-     * 适用于生成新文件的情况
+     * 读入文件并移除特定key，随后将该yaml文件内容输出到新的文件当中
+     *
      * @Author Sennri
      * @ParamList:
-     * @param key
-     * @param inputYamlName
-     * @param outputYamlName
+     * @param key   待移除键
+     * @param inputYamlName 输入文件名（含路径）
+     * @param outputYamlName    输出文件名（含路径）
      * @return void
      * @Date 2020/11/1 23:00
      */
@@ -449,12 +476,13 @@ public class YamlEditor {
     }
 
     /**
+     * 重载之一，用于同一文件的读入输出
+     *
      * @Author Sennri
-     * @Description 重载之一，用于同一文件的读入输出
      * @Date 2020/11/3 10:30
      * @ParamList:
-     * @param key
-     * @param yamlName
+     * @param key   键
+     * @param yamlName  待移除内容的Yaml文件名（包含路径）
      * @return void
      */
     public static void removeYamlContent(String key, String yamlName) throws Exception {
