@@ -1,25 +1,48 @@
 package com.fidt.yamleditor;
 
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.IllegalClassException;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.apache.commons.lang.StringUtils;
 
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
+import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.NotEmpty;
+import javax.validation.constraints.NotNull;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.file.*;
 import java.util.*;
-
-
+import java.util.regex.Pattern;
+/**
+ * yaml读写工具
+ * 重写于 2022/4/22，支持通过反转义符插入‘.’， {@link #supportEscape(boolean)}
+ * 现有逻辑较为简单，因此支持反转义符时，不支持复合键中某个键以'\'作为结束字符
+ * 由于SplitPattern不是线程安全的，如果要用在多线程环境下，并且并发地改动splitPattern的话，请将Pattern改成ThreadLocal的。
+ * Yaml类不是线程安全的，具体会因为什么而导致出错，目前尚未考察，因此没有生成static final 的 Yaml类
+ */
+@Slf4j
 public class YamlEditor {
-    protected static Log log = LogFactory.getLog(YamlEditor.class);//protected static Logger log = LoggerFactory.getLogger(YamlEditor.class);
-
     private static final DumperOptions dumperOptions = new DumperOptions();
+    private Pattern splitPattern = DOT_PATTERN;
+    /**
+     * 匹配 "\."以外的.
+     * 通过使用escapePattern, 可以使用带有'.'的字段，例如， "a.b.baidu\.com" 可以表示 键 为 1.a 2.b 3.baidu.com的复合键。
+     */
+    final static Pattern UNESCAPE_PATTERN = Pattern.compile("(?<!\\\\)\\.");
+    /**
+     * 匹配 "\."
+     */
+    final static Pattern ESCAPE_PATTERN = Pattern.compile("\\\\\\.");
+    /**
+     * 匹配 "."
+     * 预先生成splitPattern，防止String.split方法隐式的compile开销。
+     */
+    final static Pattern DOT_PATTERN = Pattern.compile("[.]");
 
     static {
         //设置yaml读取方式为块读取
@@ -28,7 +51,23 @@ public class YamlEditor {
         dumperOptions.setPrettyFlow(false);
     }
 
-    private YamlEditor() {
+    public YamlEditor() {
+    }
+
+    public YamlEditor(boolean supportEscape) {
+        supportEscape(supportEscape);
+    }
+
+    /**
+     * 是否使用"\."来区分分割点和键中的'.'，例如某个键为"cn\.fidt", 那么就应该视为 cn.fidt, 而是不是拆分为cn 和 fidt。
+     * @param is 支持通过escape防止'.'被转义为delimiter
+     */
+    public void supportEscape(boolean is) {
+        if (is) {
+            splitPattern = UNESCAPE_PATTERN;
+        } else {
+            splitPattern = DOT_PATTERN;
+        }
     }
 
     /**
@@ -53,8 +92,9 @@ public class YamlEditor {
      */
     public static Map<String, Object> getMapFromYaml(Path path) throws IOException {
         try (InputStream in = Files.newInputStream(path)) {
+            // 这里应该是有问题的？
             @SuppressWarnings("unchecked")
-            Map<String, Object> yamlMap = new Yaml().loadAs(in, LinkedHashMap.class); // 这里应该是有问题的？
+            Map<String, Object> yamlMap = new Yaml(dumperOptions).loadAs(in, LinkedHashMap.class);
             return yamlMap;
         } catch (IOException e) {
             log.error(path + " load failed !");
@@ -91,7 +131,6 @@ public class YamlEditor {
         dumpMapToYaml(yamls, Paths.get(fileName), isForced);
     }
 
-
     /**
      * 以URI作为参数确定输出文件路径,将yamlMap写入文件
      *
@@ -122,7 +161,7 @@ public class YamlEditor {
             Files.createFile(path);
         } catch (FileAlreadyExistsException ignored) {
         }
-        try (BufferedWriter bufferedWriter = Files.newBufferedWriter(path)) {//try (FileWriter fileWriter = new FileWriter(fileName)) {
+        try (BufferedWriter bufferedWriter = Files.newBufferedWriter(path)) {
             new Yaml(dumperOptions).dump(yamls, bufferedWriter);
         } catch (IOException e) {
             throw new IOException("Can't write content to file!");
@@ -146,152 +185,179 @@ public class YamlEditor {
         if (Files.exists(parentPath)) {
             dumpMapToYaml(yamls, path);
         } else if (isForced) {
-            Files.createDirectories(path.getParent()); //未经测试，不能保证功能符合预期。
+            //未经测试，不能保证功能符合预期。
+            Files.createDirectories(path.getParent());
             dumpMapToYaml(yamls, path);
         } else {
             throw new NoSuchFileException(parentPath.toString() + " does not exist.");
         }
     }
 
-
     /**
-     * 泛型化的从Map或者List对象中获取value的函数
+     * 通过分隔符'.'将复合键拆分为 String[] ,如果启用了逃逸符'\'，则清理逃逸结果
+     *
      * @Author Sennri
-     * @ParamList:
-     * @param key
-     * @param target
-     * @return java.lang.Object
-     * @Date 2020/11/1 22:50
+     * @Date 2022/4/22 16:21
+     * @ParamList
+     * @param compositeKey
+     * @return java.lang.String[]
      */
-    public static Object getValue(String key, Object target)
-            throws IllegalArgumentException {
-        if (target instanceof List) {
-            @SuppressWarnings("unchecked")
-            List<Object> list = (List<Object>) target;
-            if (key.contains(".")) {
-                String[] keys = key.split("[.]");
-                Object object;
-                try {
-                    object = list.get(Integer.parseInt(keys[0]));
-                } catch (IndexOutOfBoundsException e) {
-                    log.error("Key \"" + keys[0] + "\" is error.");
-                    throw new IllegalArgumentException("Using a wrong index which is out of bounds: " + keys[0]);
-                }
-                if (object instanceof Map || object instanceof List) {
-                    return getValue(key.substring(key.indexOf(".") + 1), object);
-                } else {
-                    throw new IllegalClassException("Target type is not supported. It should be List or Map.");
-                }
-            } else {
-                try {
-                    return list.get(Integer.parseInt(key));
-                } catch (IndexOutOfBoundsException e) { // 若超出index，也返回null，这逻辑和Map保持一致
-                    throw new IllegalArgumentException("Using a wrong index which is out of bounds: " + key);
-                }
-            }
-        } else if (target instanceof Map) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> map = ((Map<String, Object>) target);
-            if (key.contains(".")) {
-                String[] keys = key.split("[.]");
-                if (!map.containsKey(keys[0])) {
-                    throw new IllegalArgumentException("Using a wrong key which is not in the map: " + keys[0]);
-                }
-                Object object = map.get(keys[0]); //如果结果为null怎么办？
-                if (object instanceof Map || object instanceof List) {
-                    return getValue(key.substring(key.indexOf(".") + 1), object);
-                } else {
-                    log.error("Key \"" + keys[0] + "\" is error.");
-                    throw new IllegalClassException("Target type is not supported. It should be List or Map, maybe you use a wrong key?");
-                }
-            } else {
-                if (!map.containsKey(key)) {
-                    throw new IllegalArgumentException("Using a wrong key which is not in the map: " + key);
-                } else {
-                    return map.get(key);
-                }
-            }
-        } else {
-            throw new IllegalClassException("Target type is not supported. It should be List or Map, maybe you use a wrong key?");
+    private String[] splitCompositeKey(String compositeKey) {
+        String[] keys = splitPattern.split(compositeKey);
+        if (splitPattern == UNESCAPE_PATTERN) {
+            removeEscape(keys);
+        }
+        return keys;
+    }
+
+    private static void removeEscape(String[] strings) {
+        for (int i = 0, stringLength = strings.length; i < stringLength; i++) {
+            String s = strings[i];
+            strings[i] = ESCAPE_PATTERN.matcher(s).replaceAll(".");
         }
     }
 
-    // TODO: 2020/10/23 这里应该有问题,并不能解决如果下面是一个数组的情况，但是目前应该还没遇到这种情况
+    /**
+     * 通过带有'.'的复合键获取target中的对象
+     *
+     * @param compositeKey 复合键，使用 "."作为键之间的层级分隔符
+     * @param target    待取值的对象
+     * @return
+     * @throws IllegalArgumentException
+     */
+    public Object getValue(@NotBlank String compositeKey, @NotNull Object target)
+            throws IllegalArgumentException {
+        if (target == null) {
+            throw new NullPointerException();
+        }
+        String[] keys = splitCompositeKey(compositeKey);
+        return getValueDfs(keys, 0, target);
+    }
 
+    /**
+     * 递归获取值
+     *
+     * @Author Sennri
+     * @Date 2022/4/22 16:20
+     * @ParamList
+     * @param keys  键
+     * @param depth 深度
+     * @param target    取值对象
+     * @return java.lang.Object
+     */
+    private Object getValueDfs(@NotEmpty String[] keys, int depth, @NotNull Object target)
+            throws IllegalArgumentException {
+        String key = keys[depth];
+        depth++;
+        Object next;
+        if (target instanceof Map) {
+            Map<?, ?> t = (Map<?, ?>) target;
+            // 不存在键？
+            if (t.containsKey(key)) {
+                next = t.get(key);
+            } else {
+                log.error("Key {} does not exist, its index in composite key is {}", key, depth - 1);
+                throw new IllegalArgumentException("key error.");
+            }
+        } else if (target instanceof List) {
+            int index = Integer.parseInt(key);
+            List<?> t = (List<?>) target;
+            // 超出索引范围？
+            if (index < t.size()) {
+                next = ((List<?>) target).get(index);
+            } else {
+                log.error("Using a wrong index which is out of bounds: {}", index);
+                throw new IllegalArgumentException("Using a wrong index which is out of bounds: " + index);
+            }
+        } else {
+            throw new IllegalArgumentException("Target type is not supported. It should be List or Map.");
+        }
+        if (depth == keys.length) {
+            return next;
+        } else {
+            if (next == null) {
+                log.error("The value of index {} is null, please check whether this composite key is right.", depth - 1);
+                throw new IllegalArgumentException();
+            }
+        }
+        return getValueDfs(keys, depth, next);
+    }
+
+
+    // TODO: 2020/10/23 这里应该有问题,并不能解决如果下面是一个数组的情况，但是目前应该还没遇到这种情况
     /**
      * 使用递归的方式设置map中的值，仅适合单一属性 key的格式: "server.port"
      *
      * @Author Sennri
-     * @param key
+     * @param compositeKey
      * @param value
      * @return java.util.Map<java.lang.String, java.lang.Object>
      * @Date 2020/10/29 15:42
      **/
     @Deprecated
-    public static Map<String, Object> generateMap(String key, Object value) {
+    public Map<String, Object> generateMap(String compositeKey, Object value) {
         Map<String, Object> result = new LinkedHashMap<>();
-        String[] keys = key.split("[.]");
+        String[] keys = splitCompositeKey(compositeKey);
         result.put(keys[keys.length - 1], value);
         if (keys.length > 1) {
-            return generateMap(key.substring(0, key.lastIndexOf(".")), result);
+            return generateMap(compositeKey.substring(0, compositeKey.lastIndexOf(".")), result);
         }
         return result;
     }
 
-
     /**
      * 向target内寻找键值key，若key为复合形式，则一直向下取键，获得中间的value值，若这中间发现某个键在递归途中实际上不存在，则返回false
-     * 如果只是最下级的键不存在，会直接put该键。因此也可以用这个函数在最底层进行put操作
+     * 如果只是最下级的键不存在，会直接put该键。因此也可以用这个函数在最底层对Map进行put操作
      *
      * @Author Sennri
-     * @ParamList:
-     * @param target 需要进行键值修改的待操作对象
-     * @param key    目标键
-     * @param value  目标值
-     * @Date 2020/11/1 22:45
+     * @Date 2022/4/22 11:17
+     * @ParamList
+     * @param compositeKey
+     * @param value
+     * @param target
+     * @return void
      */
-    public static void setValue(String key, Object value, Object target) throws IllegalClassException {
-        if (key.isEmpty()) // 为了复用该函数来进行普通的put操作
+    public void setValue(String compositeKey, Object value, Object target) throws IllegalClassException {
+        if (compositeKey.isEmpty()) {
             throw new NullPointerException();
-        if (!key.contains(".")) { //说明到达最底的键
-            if (target instanceof Map) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> map = ((Map<String, Object>) target);
-                map.put(key, value); // todo：即便没有这个键值对，也会加上去。有一点风险，感觉不建议这么做。可能会因为错误操作而改变原有数据结构。
-            } else if (target instanceof List) {
-                @SuppressWarnings("unchecked")
-                List<Object> list = (List<Object>) target;
-                int index = Integer.parseInt(key);
-                if (0 <= index && index <= list.size() - 1) {
-                    list.set(index, value);
-                } else { //若超出既有列表边界，又或者键为负，则为新增。
-                    list.add(value);
-                }
-            } else {
-                throw new IllegalClassException("Error: target must be Map or List type!");
-            }
-        } else { //未到达最底层
-            String[] keys = key.split("[.]");
-            Object object;
-            if (target instanceof Map) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> map = ((Map<String, Object>) target);
-                object = map.get(keys[0]);
-            } else if (target instanceof List) {
-                @SuppressWarnings("unchecked")
-                List<Object> list = (List<Object>) target;
-                object = list.get(Integer.parseInt(keys[0]));
-            } else {
-                throw new IllegalClassException("Error: target must be Map or List type!");
-            }
-            if (object == null) {
-                throw new NullPointerException();
-            } else {
-                setValue(key.substring(key.indexOf(".") + 1), value, object);
-            }
         }
+        String[] keys = splitCompositeKey(compositeKey);
+        setValueDfs(keys, 0, value, target);
     }
 
+    /**
+     * 递归向下为target设置值。
+     * @param keys  拆分后的复合键
+     * @param depth 深度
+     * @param value 待插入值
+     * @param target 被插入对象
+     * @throws IllegalClassException
+     */
+    public void setValueDfs(String[] keys, int depth, Object value, Object target) throws IllegalClassException {
+        String key = keys[depth];
+        ++depth;
+        if (target instanceof Map) {
+            if (depth == keys.length) {
+                ((Map) target).put(key, value);
+            } else {
+                Object next = ((Map<?, ?>) target).get(key);
+                if (next == null) {
+                    throw new IllegalArgumentException("设置路径不正确，请保证设置路径存在。若不要求插入路径已经存在，请使用insert！");
+                }
+                setValueDfs(keys, depth, value, next);
+            }
+        } else if (target instanceof List) {
+            int index = Integer.parseInt(key);
+            if (depth == keys.length) {
+                ((List<Object>) target).set(index, value);
+            } else {
+                Object next = ((List<Object>) target).get(index);
+                setValueDfs(keys, depth, value, next);
+            }
+        } else {
+            throw new IllegalClassException("Error: target must be Map or List type!");
+        }
+    }
 
     /**
      * 更新yaml文件中的特定键，如果键不存在则不修改（不赋值），如果存在则更换为新值。
@@ -304,7 +370,7 @@ public class YamlEditor {
      * @param yamlName yaml文件的名字
      * @return void
      */
-    public static void updateYaml(@NonNull String key, @NonNull Object value, @NonNull String yamlName)
+    public void updateYaml(@NonNull String key, @NonNull Object value, @NonNull String yamlName)
             throws IOException, NullPointerException, IllegalClassException {
         Map<String, Object> yamlToMap = Objects.requireNonNull(getMapFromYaml(yamlName));
 
@@ -330,41 +396,125 @@ public class YamlEditor {
 
     /**
      * 采用递归方法向下赋值, 遇到不存在的Key路径将强制存在生成路径对应的对象
+     * 如果遇到index值超过了原有层级的列表的范围，会将后续路径添加到列表最末尾
      *
      * @Author Sennri
      * @ParamList:
-     * @param key       键
+     * @param compositeKey       键
      * @param value     值
      * @param listOrMap 可能是List也可能是Map的对象
      * @return void
      * @Date 2020/11/2 10:59
      */
-    public static void insertValueToObject(String key, Object value, Object listOrMap)
+    public void insertValueToObject(String compositeKey, Object value, Object listOrMap)
             throws NullPointerException, IllegalArgumentException {
-        if (key.isEmpty()) //因为这个函数 可能 会复用，所以空判断在这里进行即可
+        //因为这个函数 可能 会复用，所以空判断在这里进行即可
+        if (compositeKey.isEmpty()) {
             throw new NullPointerException();
-        String[] keys = key.split("[.]");
-        int len = keys.length;
-        Object temp = listOrMap;
-        // TODO: 2020/11/27 这里进行了一个循环位置数量的修改：从 i<len改为 i<len-1
-        for (int i = 0; i < len - 1; i++) { //
-            if ((getValue(keys[i], temp)) != null) { //len-1的时候应该特殊处理
-                temp = getValue(keys[i], temp);
-            } else {
-                try {
-                    new Integer(keys[i + 1]); // 若当前键的下一个键为整形数字，意味着当前本该得到却没有提取到的temp实际上是一个ArrayList
-                    ArrayList<Object> list = new ArrayList<>();
-                    setValue(keys[i], list, temp); // 单层的set应该没有会报错的情况，这里的set
-                    temp = list;
-                } catch (NumberFormatException e) {
-                    Map<String, Object> map = new LinkedHashMap<>(); // 插入一个newlinkedhashMap
-                    setValue(keys[i], map, temp);
-                    temp = map;
-                }
-            }
-        }//此时i=len-1，出循环
-        setValue(keys[keys.length - 1], value, temp); //写入键值
+        }
+        String[] keys = splitCompositeKey(compositeKey);
+        if (listOrMap instanceof Map) {
+            insertValueToMap(keys, 0, value, (Map<String, Object>) listOrMap);
+        } else {
+            insertValueToList(keys, 0, value, (List<Object>) listOrMap, Integer.parseInt(keys[0]));
+        }
     }
+
+    /**
+     * 往list插入特定元素
+     * 如果插入index大于等于当前的size，则添加到当前该级列表的最末端。
+     * @param keys
+     * @param depth
+     * @param value
+     * @param list
+     * @param index
+     * @throws NullPointerException
+     * @throws IllegalArgumentException
+     */
+    private void insertValueToList(String[] keys, int depth, Object value, List<Object> list, int index)
+            throws NullPointerException, IllegalArgumentException {
+        depth++;
+        int len = keys.length;
+        if (depth == len) {
+            if (list.size() <= index) {
+                list.add(value);
+            } else {
+                list.set(index, value);
+            }
+        } else {
+            String nextKey = keys[depth];
+            if (StringUtils.isNumeric(nextKey)) {
+                List<Object> next;
+                if (list.size() <= index) {
+                    log.warn("using index out of list range, will insert an unexisted routine");
+                    next = new ArrayList<>();
+                    list.add(next);
+                } else {
+                    next = (List<Object>) list.get(index);
+                    if (next == null) {
+                        next = new ArrayList<>();
+                        list.set(index, next);
+                    }
+                }
+                int nextIndex = Integer.parseInt(nextKey);
+                insertValueToList(keys, depth, value, next, nextIndex);
+            } else {
+                Map<String, Object> next;
+                if (list.size() <= index) {
+                    log.warn("using index out of list range, will insert an unexisted routine");
+                    next = new LinkedHashMap<>();
+                    list.add(next);
+                } else {
+                    next = (Map<String, Object>) list.get(index);
+                    if (next == null) {
+                        next = new LinkedHashMap<>();
+                        list.set(index, next);
+                    }
+                }
+                insertValueToMap(keys, depth, value, next);
+            }
+        }
+    }
+
+    /**
+     * 往map插入特定元素
+     * 如果中途不存在某个键则会生成这个键。
+     * @param keys
+     * @param depth
+     * @param value
+     * @param map
+     * @throws NullPointerException
+     * @throws IllegalArgumentException
+     */
+    private void insertValueToMap(String[] keys, int depth, Object value, Map<String, Object> map)
+            throws NullPointerException, IllegalArgumentException {
+        String currentKey = keys[depth];
+        depth++;
+        int len = keys.length;
+        if (depth == len) {
+            map.put(currentKey, value);
+        } else {
+            String nextKey = keys[depth];
+            // 这个判断导致不支持负整数，所以之前的通过-1来进行添加到末尾就不成立了。
+            if (StringUtils.isNumeric(nextKey)) {
+                int nextIndex = Integer.parseInt(nextKey);
+                List<Object> next = (List<Object>) map.get(currentKey);
+                if (next == null) {
+                    next = new ArrayList<>();
+                    map.put(currentKey, next);
+                }
+                insertValueToList(keys, depth, value, next, nextIndex);
+            } else {
+                Map<String, Object> next = (Map<String, Object>) map.get(currentKey);
+                if (next == null) {
+                    next = new LinkedHashMap<>();
+                    map.put(currentKey, next);
+                }
+                insertValueToMap(keys, depth, value, next);
+            }
+        }
+    }
+
 
     /**
      * 读取map内容并强制性赋值；向下不断使用getValue，
@@ -379,10 +529,10 @@ public class YamlEditor {
      * @return void
      * @Date 2020/11/1 22:56
      */
-    public static void insertYaml(String key,
-                                  Object value,
-                                  Map<String, Object> yamlToMap,
-                                  String outputPath) throws IOException {
+    public void insertYaml(String key,
+                           Object value,
+                           Map<String, Object> yamlToMap,
+                           String outputPath) throws IOException {
         insertValueToObject(key, value, yamlToMap);
         dumpMapToYaml(yamlToMap, outputPath);
     }
@@ -399,10 +549,10 @@ public class YamlEditor {
      * @return void
      * @Date 2020/11/1 22:55
      */
-    public static void insertYaml(String key,
-                                  Object value,
-                                  String inputPath,
-                                  String outputPath)
+    public void insertYaml(String key,
+                           Object value,
+                           String inputPath,
+                           String outputPath)
             throws IOException {
         Map<String, Object> yamlToMap = getMapFromYaml(inputPath);
         insertYaml(key, value, yamlToMap, outputPath);
@@ -419,9 +569,9 @@ public class YamlEditor {
      * @Author Sennri
      * @Date 2020/11/1 22:54
      */
-    public static void insertYaml(String key,
-                                  Object value,
-                                  String inputPath)
+    public void insertYaml(String key,
+                           Object value,
+                           String inputPath)
             throws IOException {
         insertYaml(key, value, inputPath, inputPath);
     }
@@ -432,29 +582,34 @@ public class YamlEditor {
      * @Author Sennri
      * @Date 2020/11/3 10:59
      * @ParamList:
-     * @param key   复合键
+     * @param compositeKey   复合键
      * @param listOrMap 待处理的非空list或者map对象
      * @return void
      */
-    public static void removeListOrMapContent(String key, @NonNull Object listOrMap)
+    public void removeListOrMapContent(@NotBlank String compositeKey, @NotNull Object listOrMap)
             throws IllegalClassException, NullPointerException {
         Object target;// 返回key所在对象
-        if (key.contains(".")) {
-            target = getValue(key.substring(0, key.lastIndexOf(".")), listOrMap); // 这里如果listOrMap为null会抛出IllegalClass
+        String[] keys = splitCompositeKey(compositeKey);
+        int len = keys.length;
+        if (len > 1) {
+            target = getValueDfs(Arrays.copyOf(keys, len - 1), 0, listOrMap);
+            // 如果返回值为null也会导致这里出错
+            Objects.requireNonNull(target);
         } else {
             target = listOrMap;
         }
-        Objects.requireNonNull(target);
+        String lastKey = keys[len - 1];
         if (target instanceof Map) {
             @SuppressWarnings("unchecked")
             Map<String, Object> map = (Map<String, Object>) target;
-            map.remove(key.substring(key.lastIndexOf(".") + 1));
+            map.remove(lastKey);
         } else if (target instanceof List) {
             @SuppressWarnings("unchecked")
             List<Object> list = ((List<Object>) target);
-            list.remove(Integer.parseInt(key.substring(key.lastIndexOf(".") + 1)));
-        } else
+            list.remove(Integer.parseInt(lastKey));
+        } else {
             throw new IllegalClassException("Error: target must be Map-type or List-type!");
+        }
     }
 
     /**
@@ -468,7 +623,7 @@ public class YamlEditor {
      * @return void
      * @Date 2020/11/1 23:00
      */
-    public static void removeYamlContent(String key, String inputYamlName, String outputYamlName)
+    public void removeYamlContent(String key, String inputYamlName, String outputYamlName)
             throws IOException, IllegalClassException, NullPointerException {
         Map<String, Object> yamlToMap = Objects.requireNonNull(getMapFromYaml(inputYamlName));
         removeListOrMapContent(key, yamlToMap);
@@ -485,176 +640,7 @@ public class YamlEditor {
      * @param yamlName  待移除内容的Yaml文件名（包含路径）
      * @return void
      */
-    public static void removeYamlContent(String key, String yamlName) throws Exception {
+    public void removeYamlContent(String key, String yamlName) throws Exception {
         removeYamlContent(key, yamlName, yamlName);
     }
 }
-
-//    public static void main(String[] args) throws Exception {
-//        LinkedHashMap map = new LinkedHashMap();
-//        Object object=YamlEditor.getValue("s",map);//取空值测试
-//        YamlEditor.insertValueToObject("Organizations.0.Name","org1",map); //创建新路径测试
-//        log.info(map);
-//        YamlEditor.insertValueToObject("Organizations.1.Name","org2",map);
-//        log.info(map);
-//        YamlEditor.insertValueToObject("Organizations.3.Name","org3",map); //index out of range时会自动加在最末尾
-//        log.info(map);
-//        YamlEditor.insertValueToObject("Organizations.0.ports.0","172.21.18.41",map);
-//        log.info(map);
-//        YamlEditor.setValue("Organizations.0.Name","FIDT",map); //改值测试
-//        YamlEditor.setValue("Organizations.0.ports.1","172.21.18.42",map); //setValue添加key value对测试
-//        log.info(YamlEditor.getValue("Organizations.0.ports.1",map));
-//        YamlEditor.removeListOrMapContent("Organizations.1",map);
-//        log.info(map);
-//        log.info(YamlEditor.dumpMapToYaml(map,"test.yaml"));
-//        Map temp = YamlEditor.getMapFromYaml("templates/test.yaml");
-//        log.info(temp);
-//        return;
-//    }
-
-
-//  弃用的代码：Deprecated
-
-//    /**
-//     * @param map
-//     * @param key
-//     * @param value
-//     * @return java.util.Map<java.lang.String, java.lang.Object>
-//     * @Param
-//     * @Author DELL
-//     * @Description 这个没有考虑有list的情况
-//     * @Date 2020/10/29 15:40
-//     **/
-//
-//
-//    public boolean setValue(Map<String, Object> map, String key, Object value) {
-//        String[] keys = key.split("[.]");
-//        Map temp = map;
-//        for (int i = 0; i < keys.length - 1; i++) {
-//            if (temp.containsKey(keys[i])) {
-//                temp = (Map) temp.get(keys[i]);
-//            } else {
-//                return false;
-//            }
-//        }
-//        temp.put(keys[keys.length - 1], value);//即便没有这个值
-//        return true; // 设置成功
-//    }
-
-
-//    /**
-//     * @param map
-//     * @param key
-//     * @param value
-//     * @return boolean
-//     * @Author Sennri
-//     * @Description
-//     * @Date 2020/10/29 20:40
-//     * @ParamList:
-//     */
-//    public boolean setValue(Map<String, Object> map, String key, Object value) {
-//        String[] keys = key.split("[.]");
-//        if (keys.length == 1) {
-//            map.put(keys[keys.length - 1], value);//即便没有这个值
-//            return true; // 设置成功
-//        } else {
-//            Object object;
-//            if ((object = map.get(keys[0])) != null) {
-//                if (object instanceof Map)
-//                    return setValue((Map<String, Object>) object, key.substring(key.indexOf(".") + 1), value);
-//                else if (object instanceof List)
-//                    return setValue((List<Object>) object, key.substring(key.indexOf(".") + 1), value);
-//                else {
-//                    System.out.println("Input key error");
-//                    return false;
-//                }
-//            } else {
-//                System.out.println("Can't find this key");
-//                return false;
-//            }
-//        }
-//    }
-//
-//    /**
-//     * @param list
-//     * @param key
-//     * @param value
-//     * @return boolean
-//     * @Author Sennri
-//     * @Description
-//     * @Date 2020/10/29 20:40
-//     * @ParamList:
-//     */
-//    public boolean setValue(List<Object> list, String key, Object value) {
-//        String[] keys = key.split("[.]");
-//        if (keys.length == 1) {
-//            list.set(Integer.parseInt(keys[0]), value);//即便没有这个值
-//            return true; // 设置成功
-//        } else {
-//            Object object;
-//            if ((object = list.get(Integer.parseInt(keys[0]))) != null) {
-//                if (object instanceof Map)
-//                    return setValue((Map<String, Object>) object, key.substring(key.indexOf(".") + 1), value);
-//                else if (object instanceof List)
-//                    return setValue((List<Object>) object, key.substring(key.indexOf(".") + 1), value);
-//                else {
-//                    System.out.println("Input key error");
-//                    return false;
-//                }
-//            } else {
-//                System.out.println("Can't find this key");
-//                return false;
-//            }
-//        }
-//    }
-
-//    /**
-//     * @param key     key格式：aaa.bbb.ccc (如果对于下面是数组的情况呢？
-//     * @param yamlMap
-//     * @return java.lang.Object
-//     * @Param
-//     * @Author Sennri
-//     * @Description 通过properties的方式获取yaml中的属性值
-//     * @Date 2020/10/29 15:06
-//     **/
-//    public static Object getValue(String key, Map<String, Object> yamlMap) {
-//        if (key.contains(".")) {
-//            String[] keys = key.split("[.]");
-//            Object object = yamlMap.get(keys[0]);
-//            if (object instanceof Map) {
-//                return getValue(key.substring(key.indexOf(".") + 1), (Map<String, Object>) object);
-//            } else if (object instanceof List) {
-//                return getValue(key.substring(key.indexOf(".") + 1), (List<Object>) object);
-//            } else {
-//                return null;
-//            }
-//        } else {
-//            return yamlMap.get(key);
-//        }
-//    }
-//
-//    /**
-//     * @param key
-//     * @param yamlList
-//     * @return java.lang.Object
-//     * @Param
-//     * @Author DELL
-//     * @Description 不支持
-//     * @Date 2020/10/29 15:22
-//     **/
-//
-//    public static Object getValue(String key, List<Object> yamlList) {
-//        if (key.contains(".")) {
-//            String[] keys = key.split("[.]");
-//            Object object = yamlList.get(Integer.parseInt(keys[0]));
-//            if (object instanceof Map) { //是Map
-//                return getValue(key.substring(key.indexOf(".") + 1), (Map<String, Object>) object);
-//            } else if (object instanceof List) { //也可能是链表
-//                return getValue(key.substring(key.indexOf(".") + 1), (List<Object>) object);
-//            } else {
-//                return null;
-//            }
-//        } else {
-//            return yamlList.get(Integer.parseInt(key));
-//        }
-//    }

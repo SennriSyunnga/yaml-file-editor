@@ -33,11 +33,10 @@ Service：
                 company：千里
             -org2：
 ```
-如果不知道数组的现有大小，只希望将内容添加到数组最末端，可以使用
-"Service.Profile.Organization.-1.company"
-当键为整形负数时，将强制在数组尾部添加这成员。
+
 
 ## 注意
-不支持map对象内使用整形数字作为键。
-插入路径下的Map不支持使用"."作为键的内容。例如，无法使用peer0.example.com作为某个MAP中包含的键名
-如果路径中不得不插入这样的键值对，那么首先需要考虑使用朴素的map.put作为中转。
+1. 不支持map对象内使用整形数字作为键。
+
+2. 当前版本由于对键使用common-io的isNumeric判断，移除了对负数的支持。因此不能通过-1来在list尾部添加成员。因此`"Service.Profile.Organization.-1.company"`
+不再能在Organization这一级的列表内附加新成员。
