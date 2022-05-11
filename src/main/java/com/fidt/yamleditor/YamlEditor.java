@@ -374,10 +374,10 @@ public class YamlEditor {
             throws IOException, NullPointerException, IllegalClassException {
         Map<String, Object> yamlToMap = Objects.requireNonNull(getMapFromYaml(yamlName));
 
-        // 返回待取键值所在的Map或者List，object不可取null  //return the Map or List to which the key belong.
+        // 返回待取键值所在的Map或者List，object不可取null
         Object target = Objects.requireNonNull(getValue(key.substring(0, key.lastIndexOf(".")), yamlToMap));
-        // 取旧值 get the old value from target object.
-        Object oldValue = getValue(key.substring(key.lastIndexOf(".") + 1), target); // 对上一级map取key值，得到value
+        // 取旧值 get the old value from target object. // 对上一级map取key值，得到value
+        Object oldValue = getValue(key.substring(key.lastIndexOf(".") + 1), target);
 
         if (value.equals(oldValue)) {//新旧值一样 不修改
             log.debug("New Value equals to old Value " + oldValue + " please checkout the value you want to update.");
